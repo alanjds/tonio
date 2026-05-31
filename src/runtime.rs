@@ -1,11 +1,13 @@
 use std::{
     collections::{BinaryHeap, HashMap, VecDeque},
     io::Read,
-    os::fd::FromRawFd,
     sync::{Arc, Condvar, Mutex, atomic},
     thread,
     time::{Duration, Instant},
 };
+
+#[cfg(unix)]
+use std::os::fd::FromRawFd;
 
 // use anyhow::Result;
 use crossbeam_channel as channel;
@@ -322,6 +324,7 @@ impl Runtime {
         state.handles.insert(event.token(), IOHandle::Signals);
     }
 
+    #[cfg(unix)]
     fn init_sig_socket(
         &self,
         py: Python,
@@ -357,6 +360,7 @@ impl Runtime {
         Ok(socks)
     }
 
+    #[cfg(unix)]
     fn drop_sig_socket(&self, py: Python, state: &mut RuntimeState) -> anyhow::Result<()> {
         let fd: usize = self
             .ssock_r
@@ -373,6 +377,7 @@ impl Runtime {
         Ok(())
     }
 
+    #[cfg(unix)]
     fn cleanup_io(&self, state: &mut RuntimeState) {
         let mut fds: Vec<Token> = state.handles.keys().copied().collect();
         while let Some(token) = fds.pop() {
@@ -606,6 +611,7 @@ impl Runtime {
         self.sig_handlers.pin().remove(&sig).is_some()
     }
 
+    #[cfg(unix)]
     fn _run(pyself: Py<Self>, py: Python) -> PyResult<()> {
         let rself = pyself.get();
         let mut handles = HashMap::with_capacity(128);
@@ -653,6 +659,13 @@ impl Runtime {
         rself.waker.swap(None);
         // rself.stopping.store(false, atomic::Ordering::Release);
         Ok(())
+    }
+
+    #[cfg(not(unix))]
+    fn _run(_pyself: Py<Self>, _py: Python) -> PyResult<()> {
+        Err(pyo3::exceptions::PyNotImplementedError::new_err(
+            "Runtime._run() is not available on Windows; use the asyncio backend",
+        ))
     }
 }
 

@@ -6,7 +6,7 @@ import sys
 from typing import Any, Awaitable
 
 from ..._net import _socket
-from ..._tonio import get_runtime
+from ..._backend import get_runtime
 from .._ctl import spawn_blocking
 
 

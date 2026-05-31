@@ -1,4 +1,4 @@
-from ._tonio import CancelledError, PyGenScope as _Scope, get_runtime
+from ._backend import CancelledError, PyGenScope as _Scope, get_runtime
 from ._types import Coro
 
 

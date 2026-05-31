@@ -1,4 +1,4 @@
-from .._tonio import CancelledError, PyAsyncGenScope as _Scope, get_runtime
+from .._backend import CancelledError, PyAsyncGenScope as _Scope, get_runtime
 from . import yield_now
 
 

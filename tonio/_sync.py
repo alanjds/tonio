@@ -1,7 +1,7 @@
 import contextlib
 from typing import Any
 
-from ._tonio import (
+from ._backend import (
     Barrier as _Barrier,
     Channel as _Channel,
     ChannelReceiver as _ChannelReceiver,

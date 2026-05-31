@@ -11,7 +11,7 @@ import ssl as _stdlib_ssl
 from typing import Any
 
 from .._sync import Lock
-from .._tonio import ResourceBroken, TLSStream as _TLSStream
+from .._backend import ResourceBroken, TLSStream as _TLSStream
 from .._types import Coro
 from ._streams import _Stream
 

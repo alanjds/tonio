@@ -1,0 +1,158 @@
+from __future__ import annotations
+
+import asyncio
+import concurrent.futures
+import inspect
+import multiprocessing
+import sys
+import time as _time_mod
+
+from ._events import Event, Result
+from ._trampoline import drive_generator
+from .exceptions import RuntimeAlreadyInitializedError, RuntimeNotInitializedError
+
+_current_runtime: Runtime | None = None
+
+
+def get_runtime() -> Runtime:
+    if _current_runtime is None:
+        raise RuntimeNotInitializedError('no runtime is active')
+    return _current_runtime
+
+
+def set_runtime(rt: Runtime | None):
+    global _current_runtime
+    _current_runtime = rt
+
+
+class BlockingTaskCtl:
+    __slots__ = ['_task']
+
+    def __init__(self, task: asyncio.Task):
+        self._task = task
+
+    def abort(self):
+        self._task.cancel()
+
+
+class Runtime:
+    """asyncio-backed runtime for Windows (tier-2 support)."""
+
+    def __init__(
+        self,
+        threads: int,
+        threads_blocking: int,
+        threads_blocking_timeout: int,
+        context: bool,
+        signals: list[int],
+    ):
+        self._executor = concurrent.futures.ThreadPoolExecutor(max_workers=threads_blocking)
+        self._stopping = False
+        self._ssock_r = None
+        self._ssock_w = None
+        self._sig_listening = False
+        self._sigset = signals
+        self._sig_wfd = -1
+        self._epoch = _time_mod.monotonic()
+
+    @property
+    def _clock(self) -> int:
+        return round((_time_mod.monotonic() - self._epoch) * 1_000_000)
+
+    def _spawn_pyasyncgen(self, coro):
+        asyncio.get_event_loop().create_task(coro)
+
+    def _spawn_pygen(self, gen):
+        asyncio.get_event_loop().create_task(drive_generator(gen))
+
+    def _spawn_blocking(self, fn, *args, **kwargs) -> tuple[BlockingTaskCtl, Event, Result]:
+        event = Event()
+        result = Result()
+
+        async def _run():
+            loop = asyncio.get_running_loop()
+            try:
+                val = await loop.run_in_executor(self._executor, lambda: fn(*args, **kwargs))
+                result.store((False, val))
+            except Exception as e:
+                result.store((True, e))
+            finally:
+                event.set()
+
+        task = asyncio.get_event_loop().create_task(_run())
+        return BlockingTaskCtl(task), event, result
+
+    def _io_event_r(self, fd: int) -> Event:
+        raise NotImplementedError('_io_event_r() is not available on the asyncio backend')
+
+    def _io_event_w(self, fd: int) -> Event:
+        raise NotImplementedError('_io_event_w() is not available on the asyncio backend')
+
+    def _sig_add(self, sig: int) -> Event:
+        raise NotImplementedError('Signal handling is not available on the asyncio backend')
+
+    def _sig_rem(self, sig: int) -> bool:
+        return False
+
+    def stop(self):
+        self._stopping = True
+
+    def run_pygen_until_complete(self, coro):
+        return self._run(drive_generator(coro))
+
+    def run_pyasyncgen_until_complete(self, coro):
+        return self._run(coro)
+
+    def run_until_complete(self, coro):
+        if inspect.iscoroutine(coro):
+            return self.run_pyasyncgen_until_complete(coro)
+        return self.run_pygen_until_complete(coro)
+
+    def _run(self, main_coro):
+        async def _setup_and_run():
+            set_runtime(self)
+            try:
+                return await main_coro
+            finally:
+                set_runtime(None)
+
+        if sys.platform == 'win32':
+            asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+
+        return asyncio.run(_setup_and_run())
+
+
+def new(
+    context: bool = False,
+    signals: list[int] | None = None,
+    threads: int | None = None,
+    blocking_threadpool_size: int = 128,
+    blocking_threadpool_idle_ttl: int = 30,
+) -> Runtime:
+    threads = threads or multiprocessing.cpu_count()
+    rt = Runtime(
+        threads=threads,
+        threads_blocking=blocking_threadpool_size,
+        threads_blocking_timeout=blocking_threadpool_idle_ttl,
+        context=context,
+        signals=signals or [],
+    )
+    set_runtime(rt)
+    return rt
+
+
+def run(
+    coro,
+    context: bool = False,
+    signals: list[int] | None = None,
+    threads: int | None = None,
+    blocking_threadpool_size: int = 128,
+    blocking_threadpool_idle_ttl: int = 30,
+):
+    return new(
+        context=context,
+        signals=signals,
+        threads=threads,
+        blocking_threadpool_size=blocking_threadpool_size,
+        blocking_threadpool_idle_ttl=blocking_threadpool_idle_ttl,
+    ).run_until_complete(coro)

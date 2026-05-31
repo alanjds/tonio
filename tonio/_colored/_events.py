@@ -1,4 +1,4 @@
-from .._tonio import Event as _Event, Result as Result, Waiter as Waiter
+from .._backend import Event as _Event, Result as Result, Waiter as Waiter
 
 
 class Event(_Event):
