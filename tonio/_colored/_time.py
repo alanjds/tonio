@@ -1,7 +1,7 @@
 from typing import Awaitable, TypeVar
 
-from .._time import _Interval, time
 from .._backend import CancelledError, Result, Waiter, get_runtime
+from .._time import _Interval, time
 from ._events import Event
 
 

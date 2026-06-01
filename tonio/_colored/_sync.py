@@ -1,6 +1,5 @@
 from types import TracebackType
 
-from .._sync import _LockImpl, _SemaphoreImpl
 from .._backend import (
     Barrier as _Barrier,
     Channel as _Channel,
@@ -10,6 +9,7 @@ from .._backend import (
     UnboundedChannelReceiver as _UnboundedChannelReceiver,
     UnboundedChannelSender as UnboundedChannelSender,
 )
+from .._sync import _LockImpl, _SemaphoreImpl
 
 
 class Lock(_LockImpl):

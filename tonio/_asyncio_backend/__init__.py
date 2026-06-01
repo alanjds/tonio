@@ -3,9 +3,6 @@ from ._net import Socket, TLSStream
 from ._runtime import BlockingTaskCtl, Runtime, get_runtime, new, run, set_runtime
 from ._scope import PyAsyncGenScope, PyGenScope
 from ._sync import (
-    _Barrier,
-    _Lock,
-    _Semaphore,
     Channel,
     ChannelReceiver,
     ChannelSender,
@@ -14,6 +11,9 @@ from ._sync import (
     UnboundedChannel,
     UnboundedChannelReceiver,
     UnboundedChannelSender,
+    _Barrier,
+    _Lock,
+    _Semaphore,
 )
 from .exceptions import (
     CancelledError,
@@ -23,6 +23,7 @@ from .exceptions import (
     TimeoutError,
     WouldBlock,
 )
+
 
 __all__ = [
     'BlockingTaskCtl',

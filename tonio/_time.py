@@ -1,7 +1,7 @@
 from typing import TypeVar
 
-from ._events import Event
 from ._backend import CancelledError, Result, Waiter, get_runtime
+from ._events import Event
 from ._types import Coro
 
 

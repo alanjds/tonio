@@ -9,7 +9,8 @@ import time as _time_mod
 
 from ._events import Event, Result
 from ._trampoline import drive_generator
-from .exceptions import RuntimeAlreadyInitializedError, RuntimeNotInitializedError
+from .exceptions import RuntimeNotInitializedError
+
 
 _current_runtime: Runtime | None = None
 

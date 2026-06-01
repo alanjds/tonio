@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
-from .exceptions import CancelledError, TimeoutError
+from .exceptions import CancelledError
 
 
 class _Waiter:
