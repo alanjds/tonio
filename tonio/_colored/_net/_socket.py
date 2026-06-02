@@ -353,6 +353,8 @@ class _Socket(_socket._Socket):
 
 
 def from_stdlib_socket(sock: _stdlib_socket.socket) -> _Socket:
+    if sys.platform == 'win32':
+        sock.setblocking(False)
     return _Socket(sock)
 
 
