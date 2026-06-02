@@ -86,18 +86,22 @@ class Runtime:
     def _io_event_r(self, fd: int) -> Event:
         event = Event()
         loop = asyncio.get_running_loop()
+
         def _fire():
             loop.remove_reader(fd)
             event.set()
+
         loop.add_reader(fd, _fire)
         return event
 
     def _io_event_w(self, fd: int) -> Event:
         event = Event()
         loop = asyncio.get_running_loop()
+
         def _fire():
             loop.remove_writer(fd)
             event.set()
+
         loop.add_writer(fd, _fire)
         return event
 
