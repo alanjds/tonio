@@ -1,3 +1,5 @@
+import asyncio
+
 from .._backend import CancelledError, PyAsyncGenScope as _Scope, get_runtime
 from . import yield_now
 
@@ -11,7 +13,7 @@ class Scope(_Scope):
         async def wrapper(event, waiter):
             try:
                 await inner(waiter)
-            except CancelledError:
+            except (CancelledError, asyncio.CancelledError):
                 pass
             except BaseException as exc:
                 raise exc
@@ -19,7 +21,24 @@ class Scope(_Scope):
                 event.set()
 
         if wrapped_coro := self._track(wrapper):
-            get_runtime()._spawn_pyasyncgen(wrapped_coro)
+            task = get_runtime()._spawn_pyasyncgen(wrapped_coro)
+            # On the asyncio backend _spawn_pyasyncgen returns an asyncio.Task;
+            # on the Rust backend it returns None.
+            if task is not None:
+                if not hasattr(self, '_asyncio_tasks'):
+                    self._asyncio_tasks = []
+                self._asyncio_tasks.append(task)
+                # If the scope was already cancelled before this spawn, cancel now.
+                if getattr(self, '_cancelled', False):
+                    task.cancel()
+
+    def cancel(self) -> bool:
+        result = super().cancel()
+        if result and hasattr(self, '_asyncio_tasks'):
+            for task in self._asyncio_tasks:
+                if not task.done():
+                    task.cancel()
+        return result
 
     async def __aenter__(self):
         if not self._incr(0):

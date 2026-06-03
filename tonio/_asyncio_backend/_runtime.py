@@ -60,8 +60,8 @@ class Runtime:
     def _clock(self) -> int:
         return round((_time_mod.monotonic() - self._epoch) * 1_000_000)
 
-    def _spawn_pyasyncgen(self, coro):
-        asyncio.get_event_loop().create_task(coro)
+    def _spawn_pyasyncgen(self, coro) -> asyncio.Task:
+        return asyncio.get_event_loop().create_task(coro)
 
     def _spawn_pygen(self, gen):
         asyncio.get_event_loop().create_task(drive_generator(gen))
