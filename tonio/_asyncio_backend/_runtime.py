@@ -84,8 +84,9 @@ class Runtime:
         return BlockingTaskCtl(task), event, result
 
     def _io_event_r(self, fd: int) -> Event:
-        event = Event()
+        from ._events import _IOEvent
         loop = asyncio.get_running_loop()
+        event = _IOEvent(fd, loop.remove_reader)
 
         def _fire():
             loop.remove_reader(fd)
@@ -95,8 +96,9 @@ class Runtime:
         return event
 
     def _io_event_w(self, fd: int) -> Event:
-        event = Event()
+        from ._events import _IOEvent
         loop = asyncio.get_running_loop()
+        event = _IOEvent(fd, loop.remove_writer)
 
         def _fire():
             loop.remove_writer(fd)
@@ -134,7 +136,7 @@ class Runtime:
                 set_runtime(None)
 
         if sys.platform == 'win32':
-            asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+            return asyncio.run(_setup_and_run(), loop_factory=asyncio.SelectorEventLoop)
 
         return asyncio.run(_setup_and_run())
 

@@ -98,6 +98,54 @@ class Event:
         return self.waiter(timeout_us)
 
 
+class _IOWaiter(_Waiter):
+    """Like _Waiter but calls remove_fn(fd) on cancellation to avoid WinError 10038."""
+
+    __slots__ = ['_fd', '_remove_fn']
+
+    def __init__(
+        self,
+        asyncio_event: asyncio.Event,
+        timeout_us: int | None,
+        fd: int,
+        remove_fn,
+    ):
+        super().__init__(asyncio_event, timeout_us)
+        self._fd = fd
+        self._remove_fn = remove_fn
+
+    async def _wait(self):
+        try:
+            coro = self._asyncio_event.wait()
+            if self._timeout_us is None:
+                await coro
+            else:
+                try:
+                    await asyncio.wait_for(coro, timeout=self._timeout_us / 1_000_000)
+                except asyncio.TimeoutError:
+                    pass
+        except BaseException:
+            try:
+                self._remove_fn(self._fd)
+            except Exception:
+                pass
+            raise
+
+
+class _IOEvent(Event):
+    """Event backed by add_reader/add_writer; cleans up on cancellation."""
+
+    __slots__ = ['_fd', '_remove_fn']
+
+    def __init__(self, fd: int, remove_fn):
+        super().__init__()
+        self._fd = fd
+        self._remove_fn = remove_fn
+
+    def waiter(self, timeout_us: int | None) -> _IOWaiter:
+        return _IOWaiter(self._asyncio_event, timeout_us, self._fd, self._remove_fn)
+
+
 class Result:
     """Cross-coroutine value store (equivalent to the Rust Result type)."""
 
