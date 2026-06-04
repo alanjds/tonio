@@ -85,6 +85,7 @@ class Runtime:
 
     def _io_event_r(self, fd: int) -> Event:
         from ._events import _IOEvent
+
         loop = asyncio.get_running_loop()
         event = _IOEvent(fd, loop.remove_reader)
 
@@ -97,6 +98,7 @@ class Runtime:
 
     def _io_event_w(self, fd: int) -> Event:
         from ._events import _IOEvent
+
         loop = asyncio.get_running_loop()
         event = _IOEvent(fd, loop.remove_writer)
 
