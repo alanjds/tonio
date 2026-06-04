@@ -1,7 +1,10 @@
+import os
 import sys
 
 
-if sys.platform == 'win32':
+_use_asyncio = sys.platform == 'win32' or os.environ.get('TONIO_BACKEND') == 'asyncio'
+
+if _use_asyncio:
     from ._asyncio_backend._runtime import Runtime as Runtime, new as new, run as run
 else:
     import multiprocessing

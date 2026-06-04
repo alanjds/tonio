@@ -1,13 +1,16 @@
 """Platform-conditional import hub.
 
 On Unix/macOS: re-exports Rust types from ._tonio (the compiled extension).
-On Windows: re-exports asyncio-backed Python types from ._asyncio_backend.
+On Windows (or when TONIO_BACKEND=asyncio): re-exports asyncio-backed Python types.
 """
 
+import os
 import sys
 
 
-if sys.platform == 'win32':
+_use_asyncio = sys.platform == 'win32' or os.environ.get('TONIO_BACKEND') == 'asyncio'
+
+if _use_asyncio:
     from ._asyncio_backend._events import Event, Result, Waiter
     from ._asyncio_backend._net import Socket, TLSStream
     from ._asyncio_backend._runtime import BlockingTaskCtl, Runtime, get_runtime, set_runtime

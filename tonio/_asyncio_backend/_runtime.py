@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures
+import contextvars
 import inspect
 import multiprocessing
 import sys
@@ -77,13 +78,14 @@ class Runtime:
             asyncio.run_coroutine_threadsafe(coro, self._loop)
 
     def _spawn_blocking(self, fn, *args, **kwargs) -> tuple[BlockingTaskCtl, Event, Result]:
+        ctx = contextvars.copy_context()
         event = Event()
         result = Result()
 
         async def _run():
             loop = asyncio.get_running_loop()
             try:
-                val = await loop.run_in_executor(self._executor, lambda: fn(*args, **kwargs))
+                val = await loop.run_in_executor(self._executor, lambda: ctx.run(fn, *args, **kwargs))
                 result.store((False, val))
             except Exception as e:
                 result.store((True, e))
