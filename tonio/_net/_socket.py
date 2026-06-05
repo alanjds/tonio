@@ -457,7 +457,7 @@ class _Socket(_SocketWrapper):
 
 
 def from_stdlib_socket(sock: _stdlib_socket.socket) -> _Socket:
-    if sys.platform == 'win32':
+    if sys.platform == 'win32' or os.environ.get('TONIO_BACKEND') == 'asyncio':
         sock.setblocking(False)
     return _Socket(sock)
 

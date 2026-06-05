@@ -25,10 +25,11 @@ class _ImmediateWaiter:
 
 
 class _ScopeBase:
-    __slots__ = ['_entered', '_task_count', '_done_event', '_task_done_events', '_cancelled']
+    __slots__ = ['_entered', '_exited', '_task_count', '_done_event', '_task_done_events', '_cancelled']
 
     def __init__(self):
         self._entered = False
+        self._exited = False
         self._task_count = 0
         self._done_event = Event()
         self._task_done_events: list = []
@@ -41,12 +42,15 @@ class _ScopeBase:
             self._entered = True
             return True
         else:
-            # Called by __exit__ / __aexit__ — state marker only (matches Rust).
-            # Task completion is tracked via _TaskDoneEvent, not here.
+            # Called by __exit__ / __aexit__ — mark scope as exited so post-exit
+            # spawn() calls are no-ops (mirrors Rust behaviour).
+            self._exited = True
             return True
 
     def _track(self, wrapper_fn):
         """Register a task wrapper and return the started coroutine."""
+        if self._exited:
+            return None
         self._task_count += 1
         scope_ref = self
 

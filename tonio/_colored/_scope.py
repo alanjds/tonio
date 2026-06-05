@@ -28,9 +28,12 @@ class Scope(_Scope):
                 if not hasattr(self, '_asyncio_tasks'):
                     self._asyncio_tasks = []
                 self._asyncio_tasks.append(task)
-                # If the scope was already cancelled before this spawn, cancel now.
+                # If the scope was already cancelled before this spawn, defer the
+                # cancel via call_soon so the task gets one step to enter before
+                # CancelledError is delivered (Python 3.12+ injects cancellation
+                # at the very first step if cancel() is called before the task runs).
                 if getattr(self, '_cancelled', False):
-                    task.cancel()
+                    asyncio.get_running_loop().call_soon(task.cancel)
 
     def cancel(self) -> bool:
         result = super().cancel()

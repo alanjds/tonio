@@ -115,13 +115,14 @@ class _Barrier:
 
 
 class Channel:
-    __slots__ = ['_size', '_queue', '_send_waiters', '_recv_event']
+    __slots__ = ['_size', '_queue', '_send_waiters', '_recv_event', '_closed']
 
     def __init__(self, size: int):
         self._size = size
         self._queue: list = []
         self._send_waiters: list[Event] = []
         self._recv_event = Event()
+        self._closed = False
 
 
 class ChannelSender:
@@ -136,14 +137,14 @@ class ChannelSender:
         if len(ch._queue) < ch._size:
             ch._queue.append(message)
             ev.set()
-            ch._recv_event.set()
-            ch._recv_event.clear()
+            ch._recv_event.set()  # level-triggered: stays set until queue drains
         else:
             ch._send_waiters.append((message, ev))
         return ev
 
     def close(self):
-        self._channel._recv_event.set()
+        self._channel._closed = True
+        self._channel._recv_event.set()  # wake all receivers permanently
 
 
 class ChannelReceiver:
@@ -160,8 +161,14 @@ class ChannelReceiver:
                 pending_msg, pending_ev = ch._send_waiters.pop(0)
                 ch._queue.append(pending_msg)
                 pending_ev.set()
-            return ch._recv_event, True, message
-        return ch._recv_event, False, None
+            elif not ch._queue:
+                if not ch._closed:
+                    ch._recv_event.clear()
+            return ch._recv_event, False, message  # False = not blocking = return message
+        if ch._closed:
+            raise WouldBlock()
+        ch._recv_event.clear()  # prevent spin on spurious deferred-set wakeups
+        return ch._recv_event, True, None  # True = blocking = wait on event
 
 
 class UnboundedChannel:
@@ -200,9 +207,10 @@ class UnboundedChannelReceiver:
         if ch._queue:
             message = ch._queue.pop(0)
             if not ch._queue:
-                ch._recv_event.clear()
-            return ch._recv_event, True, message
+                if not ch._closed:
+                    ch._recv_event.clear()
+            return ch._recv_event, False, message  # False = not blocking = return message
         if ch._closed:
-            return ch._recv_event, False, None
+            raise WouldBlock()
         ch._recv_event.clear()
-        return ch._recv_event, False, None
+        return ch._recv_event, True, None  # True = blocking = wait on event

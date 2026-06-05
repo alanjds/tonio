@@ -70,12 +70,13 @@ class Runtime:
             asyncio.run_coroutine_threadsafe(coro, self._loop)
             return None
 
-    def _spawn_pygen(self, gen):
+    def _spawn_pygen(self, gen) -> asyncio.Task | None:
         coro = drive_generator(gen)
         try:
-            asyncio.get_running_loop().create_task(coro)
+            return asyncio.get_running_loop().create_task(coro)
         except RuntimeError:
             asyncio.run_coroutine_threadsafe(coro, self._loop)
+            return None
 
     def _spawn_blocking(self, fn, *args, **kwargs) -> tuple[BlockingTaskCtl, Event, Result]:
         ctx = contextvars.copy_context()

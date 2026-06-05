@@ -38,28 +38,44 @@ class _Waiter:
 class _CheckpointWaiter:
     """Waiter.checkpoint() — used by timeout() / select() for coroutine cancellation."""
 
-    __slots__ = ['_future']
+    __slots__ = ['_future', '_handle', '_task']
 
     def __init__(self):
         self._future: asyncio.Future | None = None
+        self._handle = None
+        self._task = None
 
     def __await__(self):
         return self._wait().__await__()
 
     async def _wait(self):
         loop = asyncio.get_running_loop()
+        self._task = asyncio.current_task()
         self._future = loop.create_future()
+        # Resolve after one tick so normal execution continues; guarded so
+        # cancelling the future (via abort) doesn't crash the call_soon callback.
+        self._handle = loop.call_soon(
+            lambda: None if self._future.done() else self._future.set_result(None)
+        )
         try:
             await self._future
         except asyncio.CancelledError:
             raise CancelledError()
 
     def abort(self):
+        if self._handle:
+            self._handle.cancel()
+            self._handle = None
         if self._future and not self._future.done():
             self._future.cancel()
 
     def unwind(self):
-        self.abort()
+        # Cancel the wrapper task regardless of whether the checkpoint has
+        # already resolved (the coro may already be running past the checkpoint).
+        if self._task is not None and not self._task.done():
+            self._task.cancel()
+        else:
+            self.abort()
 
 
 class Waiter:
