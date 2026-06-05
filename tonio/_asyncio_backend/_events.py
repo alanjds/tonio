@@ -54,9 +54,7 @@ class _CheckpointWaiter:
         self._future = loop.create_future()
         # Resolve after one tick so normal execution continues; guarded so
         # cancelling the future (via abort) doesn't crash the call_soon callback.
-        self._handle = loop.call_soon(
-            lambda: None if self._future.done() else self._future.set_result(None)
-        )
+        self._handle = loop.call_soon(lambda: None if self._future.done() else self._future.set_result(None))
         try:
             await self._future
         except asyncio.CancelledError:
