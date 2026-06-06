@@ -66,18 +66,23 @@ impl BlockingTask {
         );
 
         match unsafe {
-            let ctx = self.ctx.map(|v| v.as_ptr());
+            // Copy the context on this worker thread before entering — entering a
+            // Context captured on a different thread without copying corrupts
+            // per-thread state under free-threaded Python (no-GIL). Mirror the
+            // pattern already used in PyGenCtxThrower / PyAsyncGenCtxThrower.
+            let ctx_copy = self.ctx.as_ref().map(|v| pyo3::ffi::PyContext_Copy(v.as_ptr()));
             let callable = self.target.into_ptr();
             let args = self.args.into_ptr();
-            if let Some(ctx) = ctx {
-                pyo3::ffi::PyContext_Enter(ctx);
+            if let Some(cctx) = ctx_copy {
+                pyo3::ffi::PyContext_Enter(cctx);
             }
             let ret = match self.kwargs {
                 Some(kw) => pyo3::ffi::PyObject_Call(callable, args, kw.into_ptr()),
                 None => pyo3::ffi::PyObject_CallObject(callable, args),
             };
-            if let Some(ctx) = ctx {
-                pyo3::ffi::PyContext_Exit(ctx);
+            if let Some(cctx) = ctx_copy {
+                pyo3::ffi::PyContext_Exit(cctx);
+                pyo3::ffi::Py_DECREF(cctx);
             }
             Bound::from_owned_ptr_or_err(py, ret)
         } {
