@@ -33,7 +33,6 @@ pub(crate) struct BlockingTask {
     target: Py<PyAny>,
     args: Py<PyAny>,
     kwargs: Option<Py<PyAny>>,
-    ctx: Option<Py<PyAny>>,
 }
 
 impl BlockingTask {
@@ -42,7 +41,6 @@ impl BlockingTask {
         target: Py<PyAny>,
         args: Py<PyAny>,
         kwargs: Option<Py<PyAny>>,
-        ctx: Option<Py<PyAny>>,
     ) -> (Self, Py<BlockingTaskCtl>, Py<Event>, Py<ResultHolder>) {
         let event = Py::new(py, Event::new()).unwrap();
         let rh = Py::new(py, ResultHolder::new(py, 2)).unwrap();
@@ -54,7 +52,6 @@ impl BlockingTask {
             target,
             args,
             kwargs,
-            ctx,
         };
         (task, ctl, event, rh)
     }
@@ -66,24 +63,16 @@ impl BlockingTask {
         );
 
         match unsafe {
-            // Copy the context on this worker thread before entering — entering a
-            // Context captured on a different thread without copying corrupts
-            // per-thread state under free-threaded Python (no-GIL). Mirror the
-            // pattern already used in PyGenCtxThrower / PyAsyncGenCtxThrower.
-            let ctx_copy = self.ctx.as_ref().map(|v| pyo3::ffi::PyContext_Copy(v.as_ptr()));
+            // Context propagation is handled at Python level via contextvars.copy_context().run()
+            // in spawn_blocking. Using PyContext_Enter/Exit here would bypass the Python
+            // eval-breaker and prevent PyThreadState_SetAsyncExc from interrupting blocking
+            // C calls (e.g. time.sleep) on free-threaded 3.14t.
             let callable = self.target.into_ptr();
             let args = self.args.into_ptr();
-            if let Some(cctx) = ctx_copy {
-                pyo3::ffi::PyContext_Enter(cctx);
-            }
             let ret = match self.kwargs {
                 Some(kw) => pyo3::ffi::PyObject_Call(callable, args, kw.into_ptr()),
                 None => pyo3::ffi::PyObject_CallObject(callable, args),
             };
-            if let Some(cctx) = ctx_copy {
-                pyo3::ffi::PyContext_Exit(cctx);
-                pyo3::ffi::Py_DECREF(cctx);
-            }
             Bound::from_owned_ptr_or_err(py, ret)
         } {
             Ok(v) => {

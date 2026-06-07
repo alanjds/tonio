@@ -1,4 +1,5 @@
 import contextlib
+import contextvars
 import threading
 from typing import Any, Awaitable, Callable, Iterable, ParamSpec, TypeVar
 
@@ -124,7 +125,12 @@ async def select(*coros) -> Any:
 
 
 async def spawn_blocking(fn: Callable[_Params, _Return], /, *args: _Params.args, **kwargs: _Params.kwargs) -> _Return:
-    ctl, event, res = get_runtime()._spawn_blocking(fn, *args, **kwargs)
+    ctx = contextvars.copy_context()
+
+    def _run_in_ctx():
+        return ctx.run(fn, *args, **kwargs)
+
+    ctl, event, res = get_runtime()._spawn_blocking(_run_in_ctx)
     with contextlib.suppress(CancelledError):
         await event.waiter(None)
     err, val = res.fetch()

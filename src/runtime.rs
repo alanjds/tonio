@@ -560,15 +560,9 @@ impl Runtime {
         Py<crate::events::Event>,
         Py<crate::events::ResultHolder>,
     )> {
-        let ctx = match self.use_pyctx {
-            true => unsafe {
-                let ret = pyo3::ffi::PyContext_CopyCurrent();
-                let bound = Bound::from_owned_ptr(py, ret).unbind();
-                Some(bound)
-            },
-            false => None,
-        };
-        let (task, ctl, event, rh) = crate::blocking::BlockingTask::new(py, f, args, kwargs, ctx);
+        // Context propagation is handled at Python level via contextvars.copy_context().run()
+        // in spawn_blocking. See tonio/_ctl.py and tonio/_colored/_ctl.py.
+        let (task, ctl, event, rh) = crate::blocking::BlockingTask::new(py, f, args, kwargs);
         self.blocking_pool
             .run(task)
             .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;

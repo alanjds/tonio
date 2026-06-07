@@ -1,4 +1,5 @@
 import contextlib
+import contextvars
 import threading
 from typing import Any, Callable, Iterable, ParamSpec, TypeVar
 
@@ -103,7 +104,12 @@ def select(*coros: Coro) -> Coro[Any]:
 
 
 def spawn_blocking(fn: Callable[_Params, _Return], /, *args: _Params.args, **kwargs: _Params.kwargs) -> Coro[_Return]:
-    ctl, event, res = get_runtime()._spawn_blocking(fn, *args, **kwargs)
+    ctx = contextvars.copy_context()
+
+    def _run_in_ctx():
+        return ctx.run(fn, *args, **kwargs)
+
+    ctl, event, res = get_runtime()._spawn_blocking(_run_in_ctx)
     with contextlib.suppress(CancelledError):
         yield event.waiter(None)
     err, val = res.fetch()
