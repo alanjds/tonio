@@ -387,6 +387,7 @@ impl Handle for PyGenCtxThrower {
             let ret =
                 pyo3::ffi::PyObject_CallMethodOneArg(self.coro.as_ptr(), throw_method.as_ptr(), self.value.as_ptr());
             pyo3::ffi::PyContext_Exit(cctx);
+            pyo3::ffi::Py_DECREF(cctx);
 
             let res = Bound::from_owned_ptr_or_err(py, ret);
             if let Some((suspension, idx)) = &self.parent {
@@ -452,6 +453,7 @@ impl Handle for PyAsyncGenCtxThrower {
             let ret =
                 pyo3::ffi::PyObject_CallMethodOneArg(self.coro.as_ptr(), throw_method.as_ptr(), self.value.as_ptr());
             pyo3::ffi::PyContext_Exit(cctx);
+            pyo3::ffi::Py_DECREF(cctx);
 
             let res = Bound::from_owned_ptr_or_err(py, ret);
             if let Err(err) = res
