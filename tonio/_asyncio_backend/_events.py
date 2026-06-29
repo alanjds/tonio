@@ -66,6 +66,10 @@ class _CheckpointWaiter:
             self._handle = None
         if self._future and not self._future.done():
             self._future.cancel()
+        elif self._task is not None and not self._task.done():
+            # Checkpoint already resolved — cancel the containing task so the
+            # coroutine is cancelled wherever it is now (mirrors unwind()).
+            self._task.cancel()
 
     def unwind(self):
         # Cancel the wrapper task regardless of whether the checkpoint has

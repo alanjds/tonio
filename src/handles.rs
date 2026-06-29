@@ -450,18 +450,30 @@ pub(crate) struct PyAsyncGenThrower {
 }
 
 impl Handle for PyAsyncGenThrower {
-    fn run(&self, py: Python, _runtime: Py<Runtime>, _state: &mut RuntimeCBHandlerState) {
+    fn run(&self, py: Python, runtime: Py<Runtime>, _state: &mut RuntimeCBHandlerState) {
         let throw_method = pyo3::intern!(py, "throw");
 
         unsafe {
             let ret =
                 pyo3::ffi::PyObject_CallMethodOneArg(self.coro.as_ptr(), throw_method.as_ptr(), self.value.as_ptr());
             let res = Bound::from_owned_ptr_or_err(py, ret);
-            if let Err(err) = res
-                && !err.is_instance_of::<pyo3::exceptions::PyStopIteration>(py)
-            {
-                println!("UNHANDLED PYASYNCGEN THROW {:?}", self.coro.bind(py));
-                err.print(py);
+            match res {
+                Ok(val) => {
+                    if let Ok(waiter) = val.extract::<Py<Waiter>>() {
+                        Waiter::register_pyasyncgen(
+                            waiter,
+                            py,
+                            runtime.clone_ref(py),
+                            SuspensionTarget::AsyncGen(self.coro.clone_ref(py)),
+                            None,
+                        );
+                    }
+                }
+                Err(err) if !err.is_instance_of::<pyo3::exceptions::PyStopIteration>(py) => {
+                    println!("UNHANDLED PYASYNCGEN THROW {:?}", self.coro.bind(py));
+                    err.print(py);
+                }
+                _ => {}
             }
         }
     }
@@ -474,7 +486,7 @@ pub(crate) struct PyAsyncGenCtxThrower {
 }
 
 impl Handle for PyAsyncGenCtxThrower {
-    fn run(&self, py: Python, _runtime: Py<Runtime>, _state: &mut RuntimeCBHandlerState) {
+    fn run(&self, py: Python, runtime: Py<Runtime>, _state: &mut RuntimeCBHandlerState) {
         let throw_method = pyo3::intern!(py, "throw");
         let ctx = self.ctx.as_ptr();
 
@@ -489,11 +501,23 @@ impl Handle for PyAsyncGenCtxThrower {
             pyo3::ffi::Py_DECREF(cctx);
 
             let res = Bound::from_owned_ptr_or_err(py, ret);
-            if let Err(err) = res
-                && !err.is_instance_of::<pyo3::exceptions::PyStopIteration>(py)
-            {
-                println!("UNHANDLED PYASYNCGEN THROW {:?}", self.coro.bind(py));
-                err.print(py);
+            match res {
+                Ok(val) => {
+                    if let Ok(waiter) = val.extract::<Py<Waiter>>() {
+                        Waiter::register_pyasyncgen(
+                            waiter,
+                            py,
+                            runtime.clone_ref(py),
+                            SuspensionTarget::AsyncGenCtx((self.coro.clone_ref(py), self.ctx.clone_ref(py))),
+                            None,
+                        );
+                    }
+                }
+                Err(err) if !err.is_instance_of::<pyo3::exceptions::PyStopIteration>(py) => {
+                    println!("UNHANDLED PYASYNCGEN THROW {:?}", self.coro.bind(py));
+                    err.print(py);
+                }
+                _ => {}
             }
         }
     }

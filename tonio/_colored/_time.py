@@ -44,7 +44,7 @@ async def timeout(coro: Awaitable[_T], timeout: int | float) -> tuple[None | _T,
     await done.wait(timeout)
 
     if not done.is_set():
-        checkpoint.unwind()
+        checkpoint.abort()
         return None, False
 
     is_err, ret = res.fetch()
