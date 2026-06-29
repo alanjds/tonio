@@ -93,7 +93,7 @@ class Runtime:
             finally:
                 event.set()
 
-        task = asyncio.get_event_loop().create_task(_run())
+        task = asyncio.get_running_loop().create_task(_run())
         return BlockingTaskCtl(task), event, result
 
     def _io_event_r(self, fd: int) -> Event:

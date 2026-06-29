@@ -19,12 +19,19 @@ class _Waiter:
         return self._wait().__await__()
 
     async def _wait(self):
-        coro = self._asyncio_event.wait()
+        if self._asyncio_event.is_set():
+            # The event is already set. The native Waiter always resumes a ready
+            # waiter through the scheduler queue (one yield), never inline — so a
+            # ready waiter still cedes control once. asyncio.Event.wait() returns
+            # without suspending when already set, so yield explicitly to mirror
+            # native; without this, yield_now() (set() + waiter) wouldn't yield.
+            await asyncio.sleep(0)
+            return
         if self._timeout_us is None:
-            await coro
+            await self._asyncio_event.wait()
         else:
             try:
-                await asyncio.wait_for(coro, timeout=self._timeout_us / 1_000_000)
+                await asyncio.wait_for(self._asyncio_event.wait(), timeout=self._timeout_us / 1_000_000)
             except asyncio.TimeoutError:
                 pass
 
@@ -89,18 +96,33 @@ class Waiter:
 class Event:
     """asyncio.Event-backed equivalent of the Rust Event."""
 
-    __slots__ = ['_asyncio_event']
+    __slots__ = ['_asyncio_event', '_loop']
 
     def __init__(self):
         self._asyncio_event = asyncio.Event()
+        # Capture the running loop so an off-thread set() (e.g. from a blocking
+        # pool worker) can hand the actual set to the loop thread. May be None
+        # if the Event is constructed before a loop is running.
+        try:
+            self._loop = asyncio.get_running_loop()
+        except RuntimeError:
+            self._loop = None
 
     def set(self):
-        # Thread-safe: may be called from blocking thread pool workers.
+        # The native Event is level-triggered and set() is synchronous: once
+        # set, is_set() is immediately True and a following clear() wins. When
+        # we are already on the loop thread (the overwhelmingly common case:
+        # every set() originates from a coroutine or a loop I/O callback) set
+        # synchronously to preserve those semantics. Only when called from a
+        # foreign thread — where asyncio primitives are not thread-safe — do we
+        # defer the set onto the loop via call_soon_threadsafe.
         try:
-            loop = asyncio.get_running_loop()
-            loop.call_soon_threadsafe(self._asyncio_event.set)
+            asyncio.get_running_loop()
         except RuntimeError:
-            self._asyncio_event.set()
+            if self._loop is not None:
+                self._loop.call_soon_threadsafe(self._asyncio_event.set)
+                return
+        self._asyncio_event.set()
 
     def clear(self):
         self._asyncio_event.clear()
