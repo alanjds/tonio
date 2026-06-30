@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures
-import contextvars
 import inspect
 import multiprocessing
 import sys
@@ -79,14 +78,16 @@ class Runtime:
             return None
 
     def _spawn_blocking(self, fn, *args, **kwargs) -> tuple[BlockingTaskCtl, Event, Result]:
-        ctx = contextvars.copy_context()
         event = Event()
         result = Result()
 
+        # Context propagation is handled by the caller (spawn_blocking in
+        # _colored/_ctl.py and _ctl.py wraps fn in ctx.run), mirroring the
+        # native backend — so copying the context again here would be redundant.
         async def _run():
             loop = asyncio.get_running_loop()
             try:
-                val = await loop.run_in_executor(self._executor, lambda: ctx.run(fn, *args, **kwargs))
+                val = await loop.run_in_executor(self._executor, lambda: fn(*args, **kwargs))
                 result.store((False, val))
             except Exception as e:
                 result.store((True, e))
