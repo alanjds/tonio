@@ -58,11 +58,14 @@ def test_contextvar_blocking(run):
 
 def test_contextvar_blocking_multiple(run):
     var = contextvars.ContextVar('spam', default='eggs')
+
     def work():
         return var.get()
+
     def _run():
         var.set('set')
         results = yield tonio.map_blocking(work, range(200))
         return results
+
     results = run(_run())
     assert all(r == 'set' for r in results)
