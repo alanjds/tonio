@@ -28,7 +28,7 @@ def main(threads, context):
     print(json.dumps(res))
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--threads', default=1, type=int, help='no of threads')
     parser.add_argument('--context', default=False, type=bool, help='use context')

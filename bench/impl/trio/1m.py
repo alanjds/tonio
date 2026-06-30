@@ -29,5 +29,5 @@ def main():
     print(json.dumps(res))
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
