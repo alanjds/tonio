@@ -18,6 +18,7 @@ jobs:
       matrix:
         python-version:
         - '3.14t'
+        - '3.15t'
 
     env:
       UV_PYTHON: ${{ matrix.python-version }}
@@ -45,6 +46,7 @@ jobs:
       matrix:
         python-version:
         - '3.14t'
+        - '3.15t'
 
     env:
       UV_PYTHON: ${{ matrix.python-version }}
