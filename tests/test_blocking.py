@@ -52,6 +52,28 @@ def test_abort(run):
     assert not stack
 
 
+def test_block_on_stress(run):
+    """Expose use-after-free in BlockingTask::run under free-threaded Python.
+
+    self.ctx.map(|v| v.as_ptr()) moves v into the closure then drops it
+    (Py_DECREF → free) before PyContext_Enter uses the raw pointer.  When
+    block_on() is then called from the blocking function it calls _spawn_pygen
+    → PyContext_CopyCurrent on the worker thread, reading the freed pointer.
+    100 concurrent tasks maximise the chance that a concurrent allocation
+    reuses the freed slot before CopyCurrent reads it.
+    """
+    def _noop():
+        yield
+
+    def _blocking(_):
+        tonio.block_on(_noop())
+
+    def _run():
+        yield tonio.map_blocking(_blocking, range(100))
+
+    run(_run())
+
+
 def test_block_on(run):
     stack = []
     ev1 = tonio.Event()
