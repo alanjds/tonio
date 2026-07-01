@@ -45,3 +45,24 @@ def test_scope_cancel_immediate(run):
 
     assert set(enter) == {1}
     assert not exit
+
+
+def test_scope_cancel_pending_sleep_does_not_hang_runtime(run):
+    # Regression test: cancelling many tasks suspended in `tonio.sleep()` leaves
+    # their timers in the scheduler's heap (never removed on cancel). If the
+    # runtime later computes its poll timeout while one of those stale, already
+    # elapsed timers sits at the top of the heap, it can end up blocking the
+    # reactor indefinitely instead of returning immediately to drain it -
+    # hanging the whole runtime, even though there is other pending work
+    # (here, the trailing `tonio.sleep(0.3)`) that should complete shortly after.
+    n_tasks = 50
+
+    async def _run():
+        async with tonio.scope() as scope:
+            for _ in range(n_tasks):
+                scope.spawn(tonio.sleep(0.01))
+            await tonio.yield_now()
+            scope.cancel()
+        await tonio.sleep(0.3)
+
+    run(_run())
