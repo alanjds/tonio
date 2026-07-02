@@ -102,8 +102,10 @@ jobs:
       fail-fast: false
       matrix:
         python-version:
+        # 3.15t is omitted on Windows: the `trustme` test dep pulls `cryptography`,
+        # which has no 3.15t Windows wheel yet and fails to build from source.
+        # 3.15t is still covered by the linux/macos jobs.
         - '3.14t'
-        - '3.15t'
 
     # The asyncio backend is pure Python, so the Rust extension is not built on
     # Windows: install deps only (no maturin) and put the source tree on the path.
