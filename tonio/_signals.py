@@ -3,7 +3,7 @@ import errno
 import signal
 import threading
 
-from ._tonio import CancelledError, get_runtime
+from ._backend import CancelledError, get_runtime
 
 
 class _SignalReceiver:
@@ -60,6 +60,8 @@ def _set_sig_wfd(fd):
 
 
 def _sig_add(sig):
+    import sys
+
     if not _is_main_thread():
         raise ValueError('Signals can only be handled from the main thread')
 
@@ -67,8 +69,9 @@ def _sig_add(sig):
     try:
         # register a dummy signal handler so Python will write the signal no in the wakeup fd
         signal.signal(sig, _noop)
-        # set SA_RESTART to limit EINTR occurrences
-        signal.siginterrupt(sig, False)
+        if sys.platform != 'win32':
+            # SA_RESTART is a Unix concept; siginterrupt() does not exist on Windows
+            signal.siginterrupt(sig, False)
     except OSError as exc:
         if exc.errno == errno.EINVAL:
             raise RuntimeError(f'signum {sig} cannot be caught')
