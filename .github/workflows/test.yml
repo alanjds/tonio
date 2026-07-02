@@ -95,27 +95,35 @@ jobs:
         source .venv/bin/activate
         make test
 
-  # windows:
-  #   runs-on: windows-latest
-  #   strategy:
-  #     fail-fast: false
-  #     matrix:
-  #       python-version:
-  #       - '3.14t'
+  windows-asyncio:
+    runs-on: windows-latest
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version:
+        - '3.14t'
+        - '3.15t'
 
-  #   env:
-  #     UV_PYTHON: ${{ matrix.python-version }}
-  #   steps:
-  #   - uses: actions/checkout@v7
-  #   - uses: astral-sh/setup-uv@v7
-  #     with:
-  #       enable-cache: false
-  #   - name: Install
-  #     run: |
-  #       uv python install ${{ env.UV_PYTHON }}
-  #       uv venv .venv
-  #       uv sync --group build --group test
-  #       uv run --no-sync maturin develop --uv --extras=test
-  #   - name: Test
-  #     run: |
-  #       uv run --no-sync make test
+    # The asyncio backend is pure Python, so the Rust extension is not built on
+    # Windows: install deps only (no maturin) and put the source tree on the path.
+    # bash is used so `make test` runs without touching the shared Makefile.
+    defaults:
+      run:
+        shell: bash
+    env:
+      UV_PYTHON: ${{ matrix.python-version }}
+      PYTHONPATH: .
+    steps:
+    - uses: actions/checkout@v7
+    - uses: astral-sh/setup-uv@v7
+      with:
+        enable-cache: false
+    - name: Install
+      run: |
+        uv python install ${{ env.UV_PYTHON }}
+        uv venv .venv
+        uv sync --no-install-project --group test
+    - name: Test
+      run: |
+        uv run --no-sync make test
