@@ -1,14 +1,30 @@
-"""Platform-conditional import hub.
+"""Backend selection hub.
 
-On Unix/macOS: re-exports Rust types from ._tonio (the compiled extension).
-On Windows (or when TONIO_BACKEND=asyncio): re-exports asyncio-backed Python types.
+The backend is resolved once, early and explicitly, from the ``TONIO_BACKEND``
+environment variable:
+
+* unset / ``"auto"`` -- ``"asyncio"`` on Windows, ``"native"`` (Rust) elsewhere
+* ``"asyncio"``      -- the pure-Python asyncio backend, on any platform
+* ``"native"``       -- the Rust extension; if it is unavailable (e.g. requested
+                        on Windows, where it is not built) the ImportError surfaces
+
+On the ``native`` path this re-exports the compiled ``._tonio`` types; on the
+``asyncio`` path it re-exports the ``._asyncio_backend`` Python types.
 """
 
 import os
 import sys
 
 
-_use_asyncio = sys.platform == 'win32' or os.environ.get('TONIO_BACKEND') == 'asyncio'
+_requested = os.environ.get('TONIO_BACKEND', 'auto')
+if _requested == 'auto':
+    _use_asyncio = sys.platform == 'win32'
+elif _requested == 'asyncio':
+    _use_asyncio = True
+elif _requested == 'native':
+    _use_asyncio = False
+else:
+    raise RuntimeError(f"Invalid TONIO_BACKEND={_requested!r}; expected 'auto', 'asyncio', or 'native'")
 
 if _use_asyncio:
     from ._asyncio_backend._events import Event, Result, Waiter

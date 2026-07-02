@@ -1,9 +1,7 @@
-import os
-import sys
-
 import pytest
 
 import tonio
+from tonio._backend import _use_asyncio
 from tonio._utils import is_asyncg
 
 
@@ -20,8 +18,7 @@ def run():
 
 
 def pytest_collection_modifyitems(items, config):
-    _asyncio_backend = sys.platform == 'win32' or os.environ.get('TONIO_BACKEND') == 'asyncio'
-    if not _asyncio_backend:
+    if not _use_asyncio:
         return
     skip = pytest.mark.skip(reason='blocking task abort not supported on asyncio backend (threads cannot be cancelled)')
     for item in items:

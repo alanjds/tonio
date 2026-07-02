@@ -6,7 +6,7 @@ import sys
 from types import TracebackType
 from typing import Any
 
-from .._backend import Socket as _SocketWrapper, get_runtime
+from .._backend import Socket as _SocketWrapper, _use_asyncio, get_runtime
 from .._ctl import spawn_blocking
 from .._types import Coro
 
@@ -457,7 +457,7 @@ class _Socket(_SocketWrapper):
 
 
 def from_stdlib_socket(sock: _stdlib_socket.socket) -> _Socket:
-    if sys.platform == 'win32' or os.environ.get('TONIO_BACKEND') == 'asyncio':
+    if _use_asyncio:
         sock.setblocking(False)
     return _Socket(sock)
 

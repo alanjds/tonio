@@ -5,7 +5,7 @@ import socket as _stdlib_socket
 import sys
 from typing import Any, Awaitable
 
-from ..._backend import get_runtime
+from ..._backend import _use_asyncio, get_runtime
 from ..._net import _socket
 from .._ctl import spawn_blocking
 
@@ -353,7 +353,7 @@ class _Socket(_socket._Socket):
 
 
 def from_stdlib_socket(sock: _stdlib_socket.socket) -> _Socket:
-    if sys.platform == 'win32' or os.environ.get('TONIO_BACKEND') == 'asyncio':
+    if _use_asyncio:
         sock.setblocking(False)
     return _Socket(sock)
 

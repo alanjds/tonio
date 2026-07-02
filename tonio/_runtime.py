@@ -1,8 +1,5 @@
-import os
-import sys
+from ._backend import _use_asyncio
 
-
-_use_asyncio = sys.platform == 'win32' or os.environ.get('TONIO_BACKEND') == 'asyncio'
 
 if _use_asyncio:
     from ._asyncio_backend._runtime import Runtime as Runtime, new as new, run as run
