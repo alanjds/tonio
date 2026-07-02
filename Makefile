@@ -15,6 +15,7 @@ format:
 
 .PHONY: lint-python
 lint-python:
+	ruff version
 	ruff check $(pysources)
 	ruff format --check $(pysources)
 
