@@ -13,7 +13,7 @@ class Scope(_Scope):
         async def wrapper(event, waiter):
             try:
                 await inner(waiter)
-            except (CancelledError, asyncio.CancelledError):
+            except CancelledError, asyncio.CancelledError:
                 pass
             except BaseException as exc:
                 raise exc
