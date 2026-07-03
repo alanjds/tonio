@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 from ._events import Event
 
 
@@ -25,7 +27,15 @@ class _ImmediateWaiter:
 
 
 class _ScopeBase:
-    __slots__ = ['_entered', '_exited', '_task_count', '_done_event', '_task_done_events', '_cancelled']
+    __slots__ = [
+        '_entered',
+        '_exited',
+        '_task_count',
+        '_done_event',
+        '_task_done_events',
+        '_cancelled',
+        '_asyncio_tasks',
+    ]
 
     def __init__(self):
         self._entered = False
@@ -34,6 +44,7 @@ class _ScopeBase:
         self._done_event = Event()
         self._task_done_events: list = []
         self._cancelled = False
+        self._asyncio_tasks: list[asyncio.Task] = []
 
     def _incr(self, val: int) -> bool:
         if val == 0:
@@ -83,10 +94,22 @@ class _ScopeBase:
             self._done_event.set()
         return self._done_event.waiter(None)
 
+    def _register_task(self, task: asyncio.Task) -> None:
+        """Track a spawned asyncio task so cancel() can reach it."""
+        self._asyncio_tasks.append(task)
+        if self._cancelled:
+            # Scope already cancelled before this task started — cancel it,
+            # deferred via call_soon so it gets one step to enter first (3.12+
+            # delivers cancellation at the very first step otherwise).
+            asyncio.get_running_loop().call_soon(task.cancel)
+
     def cancel(self) -> bool:
         if self._cancelled:
             return False
         self._cancelled = True
+        for task in self._asyncio_tasks:
+            if not task.done():
+                task.cancel()
         return True
 
 

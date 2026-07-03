@@ -1,5 +1,7 @@
-class CancelledError(BaseException):
-    pass
+# Re-export asyncio's CancelledError so shared code can catch a single backend
+# CancelledError without importing asyncio: on this backend, task cancellation
+# raises asyncio.CancelledError.
+from asyncio import CancelledError as CancelledError
 
 
 class TimeoutError(BaseException):
