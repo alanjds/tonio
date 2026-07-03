@@ -43,48 +43,65 @@ class _Waiter:
 
 
 class _CheckpointWaiter:
-    """Waiter.checkpoint() — used by timeout() / select() for coroutine cancellation."""
+    """Waiter.checkpoint() — used by timeout() / select() for coroutine cancellation.
 
-    __slots__ = ['_future', '_handle', '_task']
+    Mirrors the native backend's ``Waiter::checkpoint()`` which creates a
+    zero-events ``Waiter``.  On registration the native code checks an
+    ``aborted`` atomic flag and, if set, immediately throws ``CancelledError``
+    into the coroutine.  This class uses an ``_aborted`` flag checked at
+    ``__await__`` entry to achieve the same effect.
+    """
+
+    __slots__ = ['_aborted', '_fut', '_handle', '_task']
 
     def __init__(self):
-        self._future: asyncio.Future | None = None
-        self._handle = None
-        self._task = None
+        self._aborted = False
+        self._fut: asyncio.Future | None = None
+        self._handle: asyncio.Handle | None = None
+        self._task: asyncio.Task | None = None
 
     def __await__(self):
-        return self._wait().__await__()
-
-    async def _wait(self):
-        loop = asyncio.get_running_loop()
+        if self._aborted:
+            raise CancelledError()
         self._task = asyncio.current_task()
-        self._future = loop.create_future()
+        loop = asyncio.get_running_loop()
+        fut = loop.create_future()
+        self._fut = fut
         # Resolve after one tick so normal execution continues; guarded so
         # cancelling the future (via abort) doesn't crash the call_soon callback.
-        self._handle = loop.call_soon(lambda: None if self._future.done() else self._future.set_result(None))
+        self._handle = loop.call_soon(lambda: None if fut.done() else fut.set_result(None))
         try:
-            await self._future
+            return fut.__await__()
         except asyncio.CancelledError:
             raise CancelledError()
 
     def abort(self):
-        if self._handle:
+        """Mark as aborted and cancel the future if the await has started.
+
+        If the checkpoint already resolved (future is done), cancel the
+        containing task instead so the coroutine is cancelled wherever it
+        is now — mirroring the native backend's ``unwind()`` behaviour.
+        """
+        self._aborted = True
+        if self._handle is not None:
             self._handle.cancel()
             self._handle = None
-        if self._future and not self._future.done():
-            self._future.cancel()
+        if self._fut is not None and not self._fut.done():
+            self._fut.cancel()
         elif self._task is not None and not self._task.done():
-            # Checkpoint already resolved — cancel the containing task so the
-            # coroutine is cancelled wherever it is now (mirrors unwind()).
             self._task.cancel()
 
     def unwind(self):
-        # Cancel the wrapper task regardless of whether the checkpoint has
-        # already resolved (the coro may already be running past the checkpoint).
+        """Cancel the containing task regardless of whether the checkpoint
+        has already resolved (the coroutine may already be running past it).
+
+        We keep a reference to the task captured at ``__await__`` time because
+        by the time ``unwind()`` is called (e.g. from a scope exit) the current
+        running task may be different.
+        """
+        self.abort()
         if self._task is not None and not self._task.done():
             self._task.cancel()
-        else:
-            self.abort()
 
 
 class Waiter:

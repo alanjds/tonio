@@ -30,11 +30,12 @@ def set_runtime(rt: Runtime | None):
 class BlockingTaskCtl:
     __slots__ = ['_task']
 
-    def __init__(self, task: asyncio.Task):
+    def __init__(self, task: asyncio.Task | None):
         self._task = task
 
     def abort(self):
-        self._task.cancel()
+        if self._task is not None:
+            self._task.cancel()
 
 
 class Runtime:
@@ -80,7 +81,10 @@ class Runtime:
 
     def _spawn_blocking(self, fn, *args, **kwargs) -> tuple[BlockingTaskCtl, Event, Result]:
         event = Event()
-        result = Result()
+        # Use size=2 to match the native backend ABI: index 0 = err flag, index 1 = value.
+        # This ensures res.fetch() always returns a 2-element list [err_flag, value],
+        # even on timeout (returns [None, None]), which _ctl.py's unpacking expects.
+        result = Result(size=2)
 
         # Capture the caller's context and run fn inside it on the executor
         # thread. The native backend propagates context in Rust; the asyncio
@@ -91,19 +95,30 @@ class Runtime:
             loop = asyncio.get_running_loop()
             try:
                 val = await loop.run_in_executor(self._executor, lambda: ctx.run(fn, *args, **kwargs))
-                result.store((False, val))
+                result.store(False, 0)
+                result.store(val, 1)
             except Exception as e:
-                result.store((True, e))
+                result.store(True, 0)
+                result.store(e, 1)
             finally:
                 event.set()
 
-        task = asyncio.get_running_loop().create_task(_run())
+        try:
+            task = asyncio.get_running_loop().create_task(_run())
+        except RuntimeError:
+            # Called from a non-async thread (e.g. block_on from a ThreadPoolExecutor worker)
+            loop = self._loop
+            if loop is not None:
+                asyncio.run_coroutine_threadsafe(_run(), loop)
+            task = None
+
         return BlockingTaskCtl(task), event, result
 
     def _io_event_r(self, fd: int) -> Event:
         from ._events import _IOEvent
 
         loop = asyncio.get_running_loop()
+        self._check_fd_socket(fd, loop)
         event = _IOEvent(fd, loop.remove_reader)
 
         def _fire():
@@ -117,6 +132,7 @@ class Runtime:
         from ._events import _IOEvent
 
         loop = asyncio.get_running_loop()
+        self._check_fd_socket(fd, loop)
         event = _IOEvent(fd, loop.remove_writer)
 
         def _fire():
@@ -126,6 +142,26 @@ class Runtime:
         loop.add_writer(fd, _fire)
         return event
 
+    @staticmethod
+    def _check_fd_socket(fd: int, loop: asyncio.AbstractEventLoop) -> None:
+        """Raise a clear error if *fd* is not a socket on Windows.
+
+        ``asyncio.SelectorEventLoop`` (used on Windows) relies on ``select()``
+        which only accepts socket handles.  Pipes, files and console handles
+        will fail with an opaque ``ValueError`` or ``OSError`` at registration
+        time; this check gives the user a much clearer message upfront.
+        """
+        if sys.platform != 'win32':
+            return
+        try:
+            import select as _select
+            _select.select([fd], [], [], 0)
+        except (ValueError, OSError) as exc:
+            raise RuntimeError(
+                f'asyncio backend only supports TCP socket FDs on Windows; '
+                f'FD {fd} is not a socket ({exc})'
+            ) from exc
+
     def _sig_add(self, sig: int) -> Event:
         raise NotImplementedError('Signal handling is not available on the asyncio backend')
 
@@ -134,6 +170,7 @@ class Runtime:
 
     def stop(self):
         self._stopping = True
+        self._executor.shutdown(wait=False)
 
     def run_pygen_until_complete(self, coro):
         return self._run(drive_generator(coro))
