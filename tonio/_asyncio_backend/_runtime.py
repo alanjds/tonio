@@ -3,14 +3,16 @@ from __future__ import annotations
 import asyncio
 import concurrent.futures
 import contextvars
+import ctypes
 import inspect
 import multiprocessing
 import sys
+import threading
 import time as _time_mod
 
 from ._events import Event, Result
 from ._trampoline import drive_generator
-from .exceptions import RuntimeNotInitializedError
+from .exceptions import CancelledError, RuntimeNotInitializedError
 
 
 _current_runtime: Runtime | None = None
@@ -27,13 +29,51 @@ def set_runtime(rt: Runtime | None):
     _current_runtime = rt
 
 
+# Set up the ctypes binding for PyThreadState_SetAsyncExc once at module level.
+_PyThreadState_SetAsyncExc = ctypes.pythonapi.PyThreadState_SetAsyncExc
+_PyThreadState_SetAsyncExc.argtypes = [ctypes.c_ulong, ctypes.py_object]
+_PyThreadState_SetAsyncExc.restype = ctypes.c_int
+
+
+def _async_raise(tid: int, exc_type: type[BaseException]) -> None:
+    """Best-effort injection of *exc_type* into the thread identified by *tid*.
+
+    Mirrors the native backend's ``BlockingTaskCtl::abort()`` which calls
+    ``PyThreadState_SetAsyncExc`` through the PyO3 FFI.  This is inherently
+    best-effort:
+
+    * If the thread is blocked in a C call that does not check pending calls
+      (e.g. deep inside a native extension) the exception will be queued but
+      never delivered.
+    * If the thread ID has already been recycled the call silently returns 0.
+    * On success (return == 1) the exception will be raised at the next
+      bytecode boundary, GIL re-acquisition, or pending-call check.
+    """
+    ret = _PyThreadState_SetAsyncExc(ctypes.c_ulong(tid), exc_type)
+    if ret != 1:
+        # An error occurred (0 = thread not found, >1 = unexpected state).
+        # Clean up by clearing any spurious injected exceptions.
+        if ret > 1:
+            _PyThreadState_SetAsyncExc(ctypes.c_ulong(tid), None)
+
+
 class BlockingTaskCtl:
-    __slots__ = ['_task']
+    __slots__ = ['_task', '_thread_id']
 
     def __init__(self, task: asyncio.Task | None):
         self._task = task
+        self._thread_id: int | None = None
+
+    def _set_tid(self, tid: int) -> None:
+        """Store the native thread ID (called from the executor thread)."""
+        self._thread_id = tid
 
     def abort(self):
+        # Best-effort: inject CancelledError into the blocking thread, just
+        # like the native backend does via PyThreadState_SetAsyncExc.
+        if self._thread_id is not None:
+            _async_raise(self._thread_id, CancelledError)
+        # Cancel the asyncio wrapper task so the caller is unblocked quickly.
         if self._task is not None:
             self._task.cancel()
 
@@ -91,10 +131,21 @@ class Runtime:
         # backend is self-contained here so no shared code has to change.
         ctx = contextvars.copy_context()
 
+        # Create the ctl before the task so the executor thread can store its
+        # native thread ID into it via _set_tid().
+        ctl = BlockingTaskCtl(task=None)
+
         async def _run():
             loop = asyncio.get_running_loop()
             try:
-                val = await loop.run_in_executor(self._executor, lambda: ctx.run(fn, *args, **kwargs))
+                # Wrap the function to capture the executor thread's native ID
+                # before running the actual payload.  This gives abort() the
+                # same best-effort thread-kill capability as the native backend.
+                def _wrapper():
+                    ctl._set_tid(threading.get_ident())
+                    return ctx.run(fn, *args, **kwargs)
+
+                val = await loop.run_in_executor(self._executor, _wrapper)
                 result.store(False, 0)
                 result.store(val, 1)
             except Exception as e:
@@ -105,14 +156,15 @@ class Runtime:
 
         try:
             task = asyncio.get_running_loop().create_task(_run())
+            ctl._task = task
         except RuntimeError:
             # Called from a non-async thread (e.g. block_on from a ThreadPoolExecutor worker)
             loop = self._loop
             if loop is not None:
                 asyncio.run_coroutine_threadsafe(_run(), loop)
-            task = None
+            # ctl._task stays None in this case (no asyncio task to cancel)
 
-        return BlockingTaskCtl(task), event, result
+        return ctl, event, result
 
     def _io_event_r(self, fd: int) -> Event:
         from ._events import _IOEvent
