@@ -155,11 +155,11 @@ class Runtime:
             return
         try:
             import select as _select
+
             _select.select([fd], [], [], 0)
         except (ValueError, OSError) as exc:
             raise RuntimeError(
-                f'asyncio backend only supports TCP socket FDs on Windows; '
-                f'FD {fd} is not a socket ({exc})'
+                f'asyncio backend only supports TCP socket FDs on Windows; FD {fd} is not a socket ({exc})'
             ) from exc
 
     def _sig_add(self, sig: int) -> Event:
