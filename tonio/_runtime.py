@@ -1,177 +1,174 @@
-from ._backend import _use_asyncio
+import multiprocessing
+import socket
+
+from ._backend import Result, Runtime as _Runtime, set_runtime as _set_runtime
+from ._colored._events import Event as EventAw
+from ._events import Event
+from ._signals import _set_sig_wfd, _sig_add, _sig_rem
+from ._utils import is_asyncg
 
 
-if _use_asyncio:
-    from ._asyncio_backend._runtime import Runtime as Runtime, new as new, run as run
-else:
-    import multiprocessing
-    import socket
+class Runtime(_Runtime):
+    def run_forever(self):
+        try:
+            self._run_forever_pre()
+            self._run()
+        finally:
+            self._run_forever_post()
 
-    from ._backend import Result, Runtime as _Runtime, set_runtime as _set_runtime
-    from ._colored._events import Event as EventAw
-    from ._events import Event
-    from ._signals import _set_sig_wfd, _sig_add, _sig_rem
-    from ._utils import is_asyncg
+    def _run_forever_pre(self):
+        self._ssock_start()
+        self._sig_reg()
 
-    class Runtime(_Runtime):
-        def run_forever(self):
-            try:
-                self._run_forever_pre()
-                self._run()
-            finally:
-                self._run_forever_post()
+    def _run_forever_post(self):
+        self._sig_dereg()
+        self._ssock_stop()
+        self._stopping = False
 
-        def _run_forever_pre(self):
-            self._ssock_start()
-            self._sig_reg()
+    def _ssock_start(self):
+        if self._ssock_w is not None:
+            raise RuntimeError('self-socket has been already setup')
 
-        def _run_forever_post(self):
-            self._sig_dereg()
-            self._ssock_stop()
-            self._stopping = False
-
-        def _ssock_start(self):
-            if self._ssock_w is not None:
-                raise RuntimeError('self-socket has been already setup')
-
-            self._ssock_r, self._ssock_w = socket.socketpair()
-            try:
-                self._ssock_r.setblocking(False)
-                self._ssock_w.setblocking(False)
-            except Exception:
-                self._ssock_w = None
-                self._ssock_r = None
-                raise
-
-        def _ssock_stop(self):
-            if not self._ssock_w:
-                raise RuntimeError('self-socket has not been setup')
-
+        self._ssock_r, self._ssock_w = socket.socketpair()
+        try:
+            self._ssock_r.setblocking(False)
+            self._ssock_w.setblocking(False)
+        except Exception:
             self._ssock_w = None
             self._ssock_r = None
+            raise
 
-        def _sig_reg(self):
-            try:
-                fd = self._ssock_w.fileno()
-                self._sig_wfd = _set_sig_wfd(fd)
-                for sig in self._sigset:
-                    _sig_add(sig)
-            except Exception:
-                if self._sigset:
-                    raise
-                return
+    def _ssock_stop(self):
+        if not self._ssock_w:
+            raise RuntimeError('self-socket has not been setup')
 
-            self._sig_listening = True
+        self._ssock_w = None
+        self._ssock_r = None
 
-        def _sig_dereg(self):
-            if not self._sig_listening:
-                return
-
-            self._sig_listening = False
-
+    def _sig_reg(self):
+        try:
+            fd = self._ssock_w.fileno()
+            self._sig_wfd = _set_sig_wfd(fd)
             for sig in self._sigset:
-                try:
-                    _sig_rem(sig)
-                except Exception:
-                    pass
-            _set_sig_wfd(self._sig_wfd)
+                _sig_add(sig)
+        except Exception:
+            if self._sigset:
+                raise
+            return
 
-        def run_pygen_until_complete(self, coro):
-            done = Event()
-            res = Result()
-            is_exc = False
+        self._sig_listening = True
 
-            def runner():
-                nonlocal is_exc
-                try:
-                    ret = yield coro
-                    res.store(ret)
-                except Exception as exc:
-                    is_exc = True
-                    res.store(exc)
-                finally:
-                    done.set()
+    def _sig_dereg(self):
+        if not self._sig_listening:
+            return
 
-            def watcher():
-                yield from done.wait()
-                self.stop()
+        self._sig_listening = False
 
-            self._spawn_pygen(watcher())
-            self._spawn_pygen(runner())
-            self.run_forever()
+        for sig in self._sigset:
+            try:
+                _sig_rem(sig)
+            except Exception:
+                pass
+        _set_sig_wfd(self._sig_wfd)
 
-            ret = res.fetch()
-            if is_exc:
-                raise ret
-            return ret
+    def run_pygen_until_complete(self, coro):
+        done = Event()
+        res = Result()
+        is_exc = False
 
-        def run_pyasyncgen_until_complete(self, coro):
-            done = EventAw()
-            res = Result()
-            is_exc = False
+        def runner():
+            nonlocal is_exc
+            try:
+                ret = yield coro
+                res.store(ret)
+            except Exception as exc:
+                is_exc = True
+                res.store(exc)
+            finally:
+                done.set()
 
-            async def runner():
-                nonlocal is_exc
-                try:
-                    ret = await coro
-                    res.store(ret)
-                except Exception as exc:
-                    is_exc = True
-                    res.store(exc)
-                finally:
-                    done.set()
+        def watcher():
+            yield from done.wait()
+            self.stop()
 
-            async def watcher():
-                await done.wait()
-                self.stop()
+        self._spawn_pygen(watcher())
+        self._spawn_pygen(runner())
+        self.run_forever()
 
-            self._spawn_pyasyncgen(watcher())
-            self._spawn_pyasyncgen(runner())
-            self.run_forever()
+        ret = res.fetch()
+        if is_exc:
+            raise ret
+        return ret
 
-            ret = res.fetch()
-            if is_exc:
-                raise ret
-            return ret
+    def run_pyasyncgen_until_complete(self, coro):
+        done = EventAw()
+        res = Result()
+        is_exc = False
 
-        def run_until_complete(self, coro):
-            runner = self.run_pyasyncgen_until_complete if is_asyncg(coro) else self.run_pygen_until_complete
-            return runner(coro)
+        async def runner():
+            nonlocal is_exc
+            try:
+                ret = await coro
+                res.store(ret)
+            except Exception as exc:
+                is_exc = True
+                res.store(exc)
+            finally:
+                done.set()
 
-        def stop(self):
-            self._stopping = True
+        async def watcher():
+            await done.wait()
+            self.stop()
 
-    def new(
-        context: bool = False,
-        signals: list[int] | None = None,
-        threads: int | None = None,
-        blocking_threadpool_size: int = 128,
-        blocking_threadpool_idle_ttl: int = 30,
-    ) -> Runtime:
-        threads = threads or multiprocessing.cpu_count()
-        runtime = Runtime(
-            threads=threads,
-            threads_blocking=blocking_threadpool_size,
-            threads_blocking_timeout=blocking_threadpool_idle_ttl,
-            context=context,
-            signals=signals or [],
-        )
-        _set_runtime(runtime)
-        return runtime
+        self._spawn_pyasyncgen(watcher())
+        self._spawn_pyasyncgen(runner())
+        self.run_forever()
 
-    def run(
-        coro,
-        context: bool = False,
-        signals: list[int] | None = None,
-        threads: int | None = None,
-        blocking_threadpool_size: int = 128,
-        blocking_threadpool_idle_ttl: int = 30,
-    ):
-        runtime = new(
-            context=context,
-            signals=signals,
-            threads=threads,
-            blocking_threadpool_size=blocking_threadpool_size,
-            blocking_threadpool_idle_ttl=blocking_threadpool_idle_ttl,
-        )
-        return runtime.run_until_complete(coro)
+        ret = res.fetch()
+        if is_exc:
+            raise ret
+        return ret
+
+    def run_until_complete(self, coro):
+        runner = self.run_pyasyncgen_until_complete if is_asyncg(coro) else self.run_pygen_until_complete
+        return runner(coro)
+
+    def stop(self):
+        self._stopping = True
+
+
+def new(
+    context: bool = False,
+    signals: list[int] | None = None,
+    threads: int | None = None,
+    blocking_threadpool_size: int = 128,
+    blocking_threadpool_idle_ttl: int = 30,
+) -> Runtime:
+    threads = threads or multiprocessing.cpu_count()
+    runtime = Runtime(
+        threads=threads,
+        threads_blocking=blocking_threadpool_size,
+        threads_blocking_timeout=blocking_threadpool_idle_ttl,
+        context=context,
+        signals=signals or [],
+    )
+    _set_runtime(runtime)
+    return runtime
+
+
+def run(
+    coro,
+    context: bool = False,
+    signals: list[int] | None = None,
+    threads: int | None = None,
+    blocking_threadpool_size: int = 128,
+    blocking_threadpool_idle_ttl: int = 30,
+):
+    runtime = new(
+        context=context,
+        signals=signals,
+        threads=threads,
+        blocking_threadpool_size=blocking_threadpool_size,
+        blocking_threadpool_idle_ttl=blocking_threadpool_idle_ttl,
+    )
+    return runtime.run_until_complete(coro)

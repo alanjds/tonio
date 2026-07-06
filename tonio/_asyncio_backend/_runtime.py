@@ -4,8 +4,6 @@ import asyncio
 import concurrent.futures
 import contextvars
 import ctypes
-import inspect
-import multiprocessing
 import sys
 import threading
 import time as _time_mod
@@ -79,7 +77,12 @@ class BlockingTaskCtl:
 
 
 class Runtime:
-    """asyncio-backed runtime for Windows (tier-2 support)."""
+    """asyncio-backed runtime for Windows (tier-2 support).
+
+    This class provides the same low-level interface as the native
+    ``_tonio.Runtime`` so that ``tonio._runtime.Runtime`` (the shared
+    subclass) can work with either backend unchanged.
+    """
 
     def __init__(
         self,
@@ -207,11 +210,11 @@ class Runtime:
             return
         try:
             import select as _select
-
             _select.select([fd], [], [], 0)
         except (ValueError, OSError) as exc:
             raise RuntimeError(
-                f'asyncio backend only supports TCP socket FDs on Windows; FD {fd} is not a socket ({exc})'
+                f'asyncio backend only supports TCP socket FDs on Windows; '
+                f'FD {fd} is not a socket ({exc})'
             ) from exc
 
     def _sig_add(self, sig: int) -> Event:
@@ -220,67 +223,37 @@ class Runtime:
     def _sig_rem(self, sig: int) -> bool:
         return False
 
+    def _run(self):
+        """Run the event loop until stop() is called (matches native _Runtime interface).
+
+        ``_runtime.py``'s ``Runtime.subclass`` overrides ``stop()`` to only set
+        ``self._stopping`` (matching the native backend contract).  Since
+        ``asyncio.loop.run_forever()`` only exits on ``loop.stop()``, we
+        schedule a periodic callback that polls ``_stopping`` and calls
+        ``loop.stop()`` when set.
+        """
+        loop_factory = asyncio.SelectorEventLoop if sys.platform == 'win32' else asyncio.new_event_loop
+        loop = loop_factory()
+        asyncio.set_event_loop(loop)
+        self._loop = loop
+        set_runtime(self)
+        try:
+
+            def _check_stop():
+                if self._stopping:
+                    loop.stop()
+                else:
+                    loop.call_soon(_check_stop)
+
+            loop.call_soon(_check_stop)
+            loop.run_forever()
+        finally:
+            set_runtime(None)
+            loop.close()
+            asyncio.set_event_loop(None)
+
     def stop(self):
         self._stopping = True
         self._executor.shutdown(wait=False)
-
-    def run_pygen_until_complete(self, coro):
-        return self._run(drive_generator(coro))
-
-    def run_pyasyncgen_until_complete(self, coro):
-        return self._run(coro)
-
-    def run_until_complete(self, coro):
-        if inspect.iscoroutine(coro):
-            return self.run_pyasyncgen_until_complete(coro)
-        return self.run_pygen_until_complete(coro)
-
-    def _run(self, main_coro):
-        async def _setup_and_run():
-            self._loop = asyncio.get_running_loop()
-            set_runtime(self)
-            try:
-                return await main_coro
-            finally:
-                set_runtime(None)
-
-        if sys.platform == 'win32':
-            return asyncio.run(_setup_and_run(), loop_factory=asyncio.SelectorEventLoop)
-
-        return asyncio.run(_setup_and_run())
-
-
-def new(
-    context: bool = False,
-    signals: list[int] | None = None,
-    threads: int | None = None,
-    blocking_threadpool_size: int = 128,
-    blocking_threadpool_idle_ttl: int = 30,
-) -> Runtime:
-    threads = threads or multiprocessing.cpu_count()
-    rt = Runtime(
-        threads=threads,
-        threads_blocking=blocking_threadpool_size,
-        threads_blocking_timeout=blocking_threadpool_idle_ttl,
-        context=context,
-        signals=signals or [],
-    )
-    set_runtime(rt)
-    return rt
-
-
-def run(
-    coro,
-    context: bool = False,
-    signals: list[int] | None = None,
-    threads: int | None = None,
-    blocking_threadpool_size: int = 128,
-    blocking_threadpool_idle_ttl: int = 30,
-):
-    return new(
-        context=context,
-        signals=signals,
-        threads=threads,
-        blocking_threadpool_size=blocking_threadpool_size,
-        blocking_threadpool_idle_ttl=blocking_threadpool_idle_ttl,
-    ).run_until_complete(coro)
+        if self._loop is not None:
+            self._loop.stop()
