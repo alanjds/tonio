@@ -3,7 +3,7 @@ import errno
 import signal
 import threading
 
-from ._tonio import CancelledError, get_runtime
+from ._backend import CancelledError, get_runtime
 
 
 class _SignalReceiver:

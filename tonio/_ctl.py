@@ -2,10 +2,10 @@ import contextlib
 import threading
 from typing import Any, Callable, Iterable, ParamSpec, TypeVar
 
+from ._backend import CancelledError, Result, get_runtime
 from ._events import Event
 from ._scope import Scope
 from ._sync import Barrier
-from ._tonio import CancelledError, Result, get_runtime
 from ._types import Coro
 
 

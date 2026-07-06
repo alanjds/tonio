@@ -6,8 +6,8 @@ import sys
 from types import TracebackType
 from typing import Any
 
+from .._backend import, Socket as _SocketWrapper, get_runtime
 from .._ctl import spawn_blocking
-from .._tonio import Socket as _SocketWrapper, get_runtime
 from .._types import Coro
 
 

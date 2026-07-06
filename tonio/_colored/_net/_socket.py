@@ -5,8 +5,8 @@ import socket as _stdlib_socket
 import sys
 from typing import Any, Awaitable
 
+from ..._backend import SELECTED_BACKEND, get_runtime
 from ..._net import _socket
-from ..._tonio import get_runtime
 from .._ctl import spawn_blocking
 
 
