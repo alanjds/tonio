@@ -6,7 +6,7 @@ from .exceptions import CancelledError
 
 
 class _Waiter:
-    __slots__ = ['_asyncio_event', '_timeout_us', '_future']
+    __slots__ = ['_asyncio_event', '_timeout_us']
 
     def __init__(self, events: list[asyncio.Event], timeout_us: int | None):
         if len(events) > 1:
@@ -14,7 +14,6 @@ class _Waiter:
 
         self._asyncio_event = events[0]
         self._timeout_us = timeout_us
-        self._future: asyncio.Future | None = None
 
     def __await__(self):
         return self._wait().__await__()
