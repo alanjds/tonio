@@ -13,10 +13,7 @@ class _ImmediateWaiter:
     """
 
     def __await__(self):
-        return self._run().__await__()
-
-    async def _run(self):
-        pass  # no yield — the Task's first real suspend is inside coro
+        return iter(())
 
     def abort(self):
         pass
