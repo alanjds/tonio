@@ -18,7 +18,7 @@ class _Waiter:
         return self._wait().__await__()
 
     async def _wait(self):
-        if any(ev.is_set() for ev in self._events):
+        if all(ev.is_set() for ev in self._events):
             # native backend always yields before returning
             await asyncio.sleep(0)
             return
@@ -36,11 +36,13 @@ class _Waiter:
                     pass
             return
 
-        # First event to fire wins. Cancel losers in `finally` so nothing leaks,
-        # including if this coro gets cancelled.
+        # Join: resolves only once *every* event fires (matches the native
+        # backend's Sentinel-based multi-event Waiter, which waits for all,
+        # not a race). Cancel + reap in `finally` so nothing leaks, including
+        # if this coro gets cancelled or the timeout elapses early.
         tasks = [asyncio.ensure_future(ev.wait()) for ev in self._events]
         try:
-            await asyncio.wait(tasks, timeout=timeout, return_when=asyncio.FIRST_COMPLETED)
+            await asyncio.wait(tasks, timeout=timeout, return_when=asyncio.ALL_COMPLETED)
         finally:
             for t in tasks:
                 if not t.done():

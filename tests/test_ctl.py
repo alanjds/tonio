@@ -74,3 +74,38 @@ def test_as_completed(run):
         return outs
 
     assert run(_run()) == [0.1, 0.2, 0.3]
+
+
+def test_waiter_multiple_events_immediate(run):
+    # A multi-event Waiter is a join: it resolves only once *every* event
+    # passed to it is set, not on the first one (unlike tonio.select()).
+    def _run():
+        e1, e2 = tonio.Event(), tonio.Event()
+        e1.set()
+        e2.set()
+        yield tonio.Waiter(e1, e2)
+        return True
+
+    assert run(_run()) is True
+
+
+def test_waiter_multiple_events_wait(run):
+    exe = []
+
+    def _setter(ev, t):
+        yield tonio.sleep(t)
+        exe.append(ev)
+        ev.set()
+
+    def _waiter(e1, e2):
+        yield tonio.Waiter(e1, e2)
+        exe.append('woken')
+
+    def _run():
+        e1, e2 = tonio.Event(), tonio.Event()
+        yield tonio.spawn(_setter(e1, 0.05), _setter(e2, 0.1), _waiter(e1, e2))
+
+    run(_run())
+    # woken only after *both* events fired, i.e. last in the list
+    assert exe[-1] == 'woken'
+    assert len(exe) == 3

@@ -117,6 +117,26 @@ async def _consume_pygen(gen) -> Any:
                 return e.value
 
 
+async def _drain_pending_tasks() -> None:
+    """Cancel and await any task still pending on this loop before it closes.
+
+    Fire-and-forget spawns (e.g. tonio.spawn.without_tracking, used by
+    serve_listeners for its per-connection accept-loop handlers) are never
+    individually awaited by their caller -- that's their point. Without this,
+    they're simply abandoned when run_forever() returns and the loop is
+    closed right after, so asyncio destroys them later (at the next loop's
+    GC pass, or interpreter shutdown) as still-pending tasks, logging
+    "Task was destroyed but it is pending!" plus a cascading
+    RuntimeError('Event loop is closed') from whatever cleanup they run on
+    being torn down. Mirrors what asyncio.run() itself does on exit.
+    """
+    pending = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
+    for task in pending:
+        task.cancel()
+    if pending:
+        await asyncio.gather(*pending, return_exceptions=True)
+
+
 class BlockingTaskCtl:
     __slots__ = ['_task', '_thread_id']
 
@@ -296,9 +316,12 @@ class Runtime:
             loop.run_forever()
         finally:
             set_runtime(None)
-            loop.close()
-            asyncio.set_event_loop(None)
-            self._loop = None
+            try:
+                loop.run_until_complete(_drain_pending_tasks())
+            finally:
+                loop.close()
+                asyncio.set_event_loop(None)
+                self._loop = None
 
     def stop(self):
         self._stopping = True
