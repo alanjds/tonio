@@ -18,9 +18,9 @@ class _Semaphore:
         if self._value > 0:
             self._value -= 1
             return None
-        ev = Event()
-        self._waiters.append(ev)
-        return ev
+        event = Event()
+        self._waiters.append(event)
+        return event
 
     def try_acquire(self):
         if self._value <= 0:
@@ -63,9 +63,9 @@ class LockCtx(SemaphoreCtx):
 
 
 class _Lock(_Semaphore):
-    """A 1-position semaphore, i.e. a lock.
+    """Lock: A semaphore with 1 position.
 
-    Inherits all behaviour from _Semaphore with an initial value of 1.
+    Implemented as a _Semaphore with an initial value of 1.
     """
 
     __slots__ = []
@@ -125,14 +125,16 @@ class ChannelSender:
         if len(channel._queue) < channel._size:
             channel._queue.append(message)
             event.set()
-            channel._recv_event.set()  # level-triggered: stays set until queue drains
+            # recv stays available until queue empties
+            channel._recv_event.set()
         else:
             channel._send_waiters.append((message, event))
         return event
 
     def close(self):
         self._channel._closed = True
-        self._channel._recv_event.set()  # wake all receivers permanently
+        # all receivers should be waked on channel close
+        self._channel._recv_event.set()
 
 
 class ChannelReceiver:
@@ -141,7 +143,15 @@ class ChannelReceiver:
     def __init__(self, channel: Channel):
         self._channel = channel
 
-    def _receive(self) -> tuple:
+    def _receive(self) -> tuple[Event, bool, Any]:
+        """Returns tuple(event, blocking, message)
+
+        When `blocking` is False, `message` contains the received value
+        and the caller can return it immediately.
+
+        When `blocking` is True, `message` is None
+        and the caller should await `event` before retrying.
+        """
         channel = self._channel
         if channel._queue:
             message = channel._queue.popleft()
@@ -152,11 +162,13 @@ class ChannelReceiver:
             elif not channel._queue:
                 if not channel._closed:
                     channel._recv_event.clear()
-            return channel._recv_event, False, message  # False = not blocking = return message
+            # not blocking: return message
+            return channel._recv_event, False, message
         if channel._closed:
             raise WouldBlock()
-        channel._recv_event.clear()  # prevent spin on spurious deferred-set wakeups
-        return channel._recv_event, True, None  # True = blocking = wait on event
+        channel._recv_event.clear()  # prevent infine loops
+        # blocking: wait next event
+        return channel._recv_event, True, None
 
 
 class UnboundedChannel:
@@ -189,15 +201,25 @@ class UnboundedChannelReceiver:
     def __init__(self, channel: UnboundedChannel):
         self._channel = channel
 
-    def _receive(self) -> tuple:
+    def _receive(self) -> tuple[Event, bool, Any]:
+        """Returns tuple(event, blocking, message)
+
+        When `blocking` is False, `message` contains the received value
+        and the caller can return it immediately.
+
+        When `blocking` is True, `message` is None
+        and the caller should await `event` before retrying.
+        """
         channel = self._channel
         if channel._queue:
             message = channel._queue.popleft()
             if not channel._queue:
                 if not channel._closed:
                     channel._recv_event.clear()
-            return channel._recv_event, False, message  # False = not blocking = return message
+            # not blocking: return message
+            return channel._recv_event, False, message
         if channel._closed:
             raise WouldBlock()
-        channel._recv_event.clear()
-        return channel._recv_event, True, None  # True = blocking = wait on event
+        channel._recv_event.clear()  # prevent infine loops
+        # blocking: wait next event
+        return channel._recv_event, True, None
