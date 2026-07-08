@@ -134,6 +134,27 @@ def test_channel(run):
     assert consumed == ({*range(100, 110)} | {*range(200, 210)} | {*range(300, 310)} | {*range(400, 410)})
 
 
+def test_channel_closed(run):
+    def _run():
+        sender, receiver = channel.channel(2)
+        yield sender.send('queued')
+        sender.close()
+
+        # a message queued before close is still delivered
+        got = yield receiver.receive()
+        assert got == 'queued'
+
+        # sending after close raises
+        with pytest.raises(BrokenPipeError):
+            yield sender.send('after-close')
+
+        # receiving after close+drained raises
+        with pytest.raises(BrokenPipeError):
+            yield receiver.receive()
+
+    run(_run())
+
+
 def test_channel_unbounded(run):
     def _produce(sender, barrier, offset, no):
         for i in range(no):
@@ -194,3 +215,24 @@ def test_channel_unbounded(run):
     consumed = {v for c in consumed for v in c}
     assert len(consumed) == 40
     assert consumed == ({*range(100, 110)} | {*range(200, 210)} | {*range(300, 310)} | {*range(400, 410)})
+
+
+def test_channel_unbounded_closed(run):
+    def _run():
+        sender, receiver = channel.unbounded()
+        sender.send('queued')
+        sender.close()
+
+        # a message queued before close is still delivered
+        got = yield receiver.receive()
+        assert got == 'queued'
+
+        # sending after close raises
+        with pytest.raises(BrokenPipeError):
+            sender.send('after-close')
+
+        # receiving after close+drained raises
+        with pytest.raises(BrokenPipeError):
+            yield receiver.receive()
+
+    run(_run())

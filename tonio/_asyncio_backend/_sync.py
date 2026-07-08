@@ -122,6 +122,8 @@ class ChannelSender:
 
     def _send(self, message: Any) -> Event:
         channel = self._channel
+        if channel._closed:
+            raise BrokenPipeError()
         event = Event()
         if len(channel._queue) < channel._size:
             channel._queue.append(message)
@@ -166,7 +168,7 @@ class ChannelReceiver:
             # not blocking: return message
             return channel._recv_event, False, message
         if channel._closed:
-            raise WouldBlock()
+            raise BrokenPipeError()
         channel._recv_event.clear()  # prevent infine loops
         # blocking: wait next event
         return channel._recv_event, True, None
@@ -188,6 +190,8 @@ class UnboundedChannelSender:
         self._channel = channel
 
     def send(self, message: Any):
+        if self._channel._closed:
+            raise BrokenPipeError()
         self._channel._queue.append(message)
         self._channel._recv_event.set()
 
@@ -220,7 +224,7 @@ class UnboundedChannelReceiver:
             # not blocking: return message
             return channel._recv_event, False, message
         if channel._closed:
-            raise WouldBlock()
+            raise BrokenPipeError()
         channel._recv_event.clear()  # prevent infine loops
         # blocking: wait next event
         return channel._recv_event, True, None
