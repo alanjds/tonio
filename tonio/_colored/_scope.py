@@ -19,9 +19,10 @@ class Scope(_Scope):
                 event.set()
 
         if wrapped_coro := self._track(wrapper):
-            # The asyncio backend needs to track the task for cancelation.
-            # The native backend returns None.
-            if task := get_runtime()._spawn_pyasyncgen(wrapped_coro) is not None:
+            task = get_runtime()._spawn_pyasyncgen(wrapped_coro)
+            # The asyncio backend needs to track it for cancelation.
+            # `task` is None on the native backend.
+            if task:
                 self._register_task(task)
 
     async def __aenter__(self):
