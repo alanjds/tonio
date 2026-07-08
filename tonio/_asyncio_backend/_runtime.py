@@ -299,6 +299,7 @@ class Runtime:
             set_runtime(None)
             loop.close()
             asyncio.set_event_loop(None)
+            self._loop = None
 
     def stop(self):
         self._stopping = True
