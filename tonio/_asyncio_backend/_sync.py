@@ -56,6 +56,7 @@ class SemaphoreCtx:
 
 class LockCtx(SemaphoreCtx):
     """Lock context manager."""
+
     __slots__ = []
 
     def __init__(self, lock: _Lock):
