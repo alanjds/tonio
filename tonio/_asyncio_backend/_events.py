@@ -6,33 +6,46 @@ from .exceptions import CancelledError
 
 
 class _Waiter:
-    __slots__ = ['_asyncio_event', '_timeout_us']
+    __slots__ = ['_events', '_timeout_us']
 
     def __init__(self, events: list[asyncio.Event], timeout_us: int | None):
-        if len(events) > 1:
-            raise NotImplementedError()
-
-        self._asyncio_event = events[0]
+        if not events:
+            raise NotImplementedError('No event provided')
+        self._events = events
         self._timeout_us = timeout_us
 
     def __await__(self):
         return self._wait().__await__()
 
     async def _wait(self):
-        if self._asyncio_event.is_set():
-            # yield explicitly, otherwise `yield_now() (set() + waiter)`
-            # will not yield like the native Waiter.
+        if any(ev.is_set() for ev in self._events):
+            # native backend always yields before returning
             await asyncio.sleep(0)
             return
 
-        coro = self._asyncio_event.wait()
-        if self._timeout_us is None:
-            await coro
-        else:
-            try:
-                await asyncio.wait_for(coro, timeout=self._timeout_us / 1_000_000)
-            except asyncio.TimeoutError:
-                pass
+        timeout = None if self._timeout_us is None else self._timeout_us / 1_000_000
+
+        if len(self._events) == 1:
+            coro = self._events[0].wait()
+            if timeout is None:
+                await coro
+            else:
+                try:
+                    await asyncio.wait_for(coro, timeout=timeout)
+                except asyncio.TimeoutError:
+                    pass
+            return
+
+        # First event to fire wins. Cancel losers in `finally` so nothing leaks,
+        # including if this coro gets cancelled.
+        tasks = [asyncio.ensure_future(ev.wait()) for ev in self._events]
+        try:
+            await asyncio.wait(tasks, timeout=timeout, return_when=asyncio.FIRST_COMPLETED)
+        finally:
+            for t in tasks:
+                if not t.done():
+                    t.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
 
     def abort(self):
         pass
@@ -93,7 +106,10 @@ class _CheckpointWaiter:
             self._task.cancel()
 
 
-class Waiter:
+class Waiter(_Waiter):
+    def __init__(self, *events: Event):
+        super().__init__([e._asyncio_event for e in events], timeout_us=None)
+
     @staticmethod
     def checkpoint() -> _CheckpointWaiter:
         return _CheckpointWaiter()
