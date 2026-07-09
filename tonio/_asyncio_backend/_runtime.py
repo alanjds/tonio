@@ -292,8 +292,8 @@ class Runtime:
     def _run(self):
         """Run the event loop until `stop()` is called
 
-        As subclasses may override stop() to set self._stopping,
-        it should trigger asyncio' `loop.stop()` via a checking callback
+        As subclasses override stop() to set self._stopping,
+        it triggers asyncio' `loop.stop()` via a recurrent checking callback
         """
         loop = _LOOP_FACTORY()
         asyncio.set_event_loop(loop)
@@ -323,8 +323,16 @@ class Runtime:
                 asyncio.set_event_loop(None)
                 self._loop = None
 
-    def stop(self):
+    def _shutdown(self):
         self._stopping = True
         self._executor.shutdown(wait=False)
         if self._loop is not None:
             self._loop.stop()
+
+    def stop(self):
+        """Signals the Runtime to stop ASAP"""
+        self._stopping = True
+
+    def __del__(self):
+        # Shuts down self._executor:
+        self._shutdown()
