@@ -163,6 +163,8 @@ class Runtime:
         self._epoch = _stdlib_time.monotonic()
         self._loop: asyncio.AbstractEventLoop = None
         self._pending: list[CoroutineType] = []
+        self._sig_events: dict[int, Event] = {}
+        self._sig_reader_installed = False
 
     @property
     def _clock(self) -> int:
@@ -264,10 +266,34 @@ class Runtime:
         return event
 
     def _sig_add(self, sig: int) -> Event:
-        raise NotImplementedError('No signal handling availble on asyncio backend (yet)')
+        event = self._sig_events.setdefault(sig, Event())
+        if not self._sig_reader_installed and self._ssock_r is not None:
+            asyncio.get_running_loop().add_reader(self._ssock_r.fileno(), self._on_sig_wakeup)
+            self._sig_reader_installed = True
+        return event
 
     def _sig_rem(self, sig: int) -> bool:
-        return False
+        return self._sig_events.pop(sig, None) is not None
+
+    def _on_sig_wakeup(self):
+        try:
+            data: list[int] = self._ssock_r.recv(4096) if self._ssock_r else []
+        except BlockingIOError, InterruptedError:
+            return
+        for signum in data:
+            # The self-pipe carries one byte per delivered signal (its number)
+            event = self._sig_events.get(signum)
+            if event is not None:
+                event.set()
+
+    def _disarm_signals(self):
+        if self._sig_reader_installed and self._ssock_r is not None:
+            try:
+                self._loop.remove_reader(self._ssock_r.fileno())
+            except ValueError, OSError:
+                pass
+        self._sig_reader_installed = False
+        self._sig_events.clear()
 
     def _disarm_loop(self):
         self._loop.close()
@@ -300,6 +326,7 @@ class Runtime:
             loop.call_soon(_check_stop)
             loop.run_forever()
         finally:
+            self._disarm_signals()
             set_runtime(None)
             self._disarm_loop()
 
