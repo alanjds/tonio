@@ -310,6 +310,7 @@ class Runtime:
         self._sig_events.clear()
 
     def _disarm_loop(self):
+        self._loop.stop()
         self._loop.close()
         asyncio.set_event_loop(None)
         self._loop = None
