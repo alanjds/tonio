@@ -9,7 +9,6 @@ class _Waiter:
     __slots__ = ['_asyncio_events', '_timeout']
 
     def __init__(self, events: list[asyncio.Event], timeout_us: int | None):
-        breakpoint()
         if not events:
             raise RuntimeError('No event provided')
 
@@ -98,7 +97,6 @@ class _CheckpointWaiter:
 
 class Waiter:
     def __init__(self, *events: Event):
-        breakpoint()
         super().__init__([e._asyncio_event for e in events], timeout_us=None)
 
     @staticmethod
@@ -112,7 +110,6 @@ class Event:
     __slots__ = ['_asyncio_event', '_loop']
 
     def __init__(self):
-        breakpoint()
         self._asyncio_event = asyncio.Event()
         # Stores the loop, allowing other threads to call `set()`
         try:
