@@ -95,7 +95,7 @@ class _CheckpointWaiter:
             self._task.cancel()
 
 
-class Waiter:
+class Waiter(_Waiter):
     def __init__(self, *events: Event):
         super().__init__([e._asyncio_event for e in events], timeout_us=None)
 
