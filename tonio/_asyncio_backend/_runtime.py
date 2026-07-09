@@ -183,6 +183,12 @@ class Runtime:
         self._epoch = _stdlib_time.monotonic()
         self._loop: asyncio.AbstractEventLoop = None
         self._pending: list[CoroutineType] = []
+        # Per-signal Events, keyed by signal number. tonio._signals registers the
+        # OS-level handler and self-pipe (writing the signal number as a byte into
+        # self._ssock_w); we read that pipe here and fan out to whichever Events
+        # were requested via _sig_add(), matching the native sig_handlers map.
+        self._sig_events: dict[int, Event] = {}
+        self._sig_reader_installed = False
 
     @property
     def _clock(self) -> int:
@@ -284,10 +290,29 @@ class Runtime:
         return event
 
     def _sig_add(self, sig: int) -> Event:
-        raise NotImplementedError('No signal handling availble on asyncio backend (yet)')
+        event = self._sig_events.get(sig)
+        if event is None:
+            event = Event()
+            self._sig_events[sig] = event
+        if not self._sig_reader_installed and self._ssock_r is not None:
+            asyncio.get_running_loop().add_reader(self._ssock_r.fileno(), self._on_sig_wakeup)
+            self._sig_reader_installed = True
+        return event
 
     def _sig_rem(self, sig: int) -> bool:
-        return False
+        return self._sig_events.pop(sig, None) is not None
+
+    def _on_sig_wakeup(self):
+        # The self-pipe (registered via signal.set_wakeup_fd by tonio._signals)
+        # carries one byte per delivered signal, holding its signal number.
+        try:
+            data = self._ssock_r.recv(4096)
+        except BlockingIOError, InterruptedError:
+            return
+        for signum in data:
+            event = self._sig_events.get(signum)
+            if event is not None:
+                event.set()
 
     def _run(self):
         """Run the event loop until `stop()` is called
@@ -315,6 +340,13 @@ class Runtime:
             loop.call_soon(_check_stop)
             loop.run_forever()
         finally:
+            if self._sig_reader_installed and self._ssock_r is not None:
+                try:
+                    loop.remove_reader(self._ssock_r.fileno())
+                except ValueError, OSError:
+                    pass
+            self._sig_reader_installed = False
+            self._sig_events.clear()
             set_runtime(None)
             try:
                 loop.run_until_complete(_drain_pending_tasks())
