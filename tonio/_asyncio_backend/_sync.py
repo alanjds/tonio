@@ -160,7 +160,7 @@ class ChannelReceiver:
             # not blocking: return message
             return channel._recv_event, False, message
         if channel._closed:
-            raise WouldBlock()
+            raise BrokenPipeError()
         channel._recv_event.clear()  # prevent infine loops
         # blocking: wait next event
         return channel._recv_event, True, None
@@ -214,7 +214,7 @@ class UnboundedChannelReceiver:
             # not blocking: return message
             return channel._recv_event, False, message
         if channel._closed:
-            raise WouldBlock()
+            raise BrokenPipeError()
         channel._recv_event.clear()  # prevent infine loops
         # blocking: wait next event
         return channel._recv_event, True, None
