@@ -9,30 +9,32 @@ class _Waiter:
     __slots__ = ['_asyncio_event', '_timeout_us']
 
     def __init__(self, events: list[asyncio.Event], timeout_us: int | None):
-        if len(events) > 1:
-            raise NotImplementedError()
+        if not events:
+            raise RuntimeError('No event provided')
 
-        self._asyncio_event = events[0]
-        self._timeout_us = timeout_us
+        self._asyncio_events = events
+        self._timeout = timeout_us / 1_000_000 if timeout_us else timeout_us
 
     def __await__(self):
         return self._wait().__await__()
 
     async def _wait(self):
-        if self._asyncio_event.is_set():
+        if all(ev.is_set() for ev in self._asyncio_events):
             # yield explicitly, otherwise `yield_now() (set() + waiter)`
             # will not yield like the native Waiter.
             await asyncio.sleep(0)
             return
 
-        coro = self._asyncio_event.wait()
-        if self._timeout_us is None:
-            await coro
-        else:
-            try:
-                await asyncio.wait_for(coro, timeout=self._timeout_us / 1_000_000)
-            except asyncio.TimeoutError:
-                pass
+        # resolves only if every event fires
+        tasks = [asyncio.ensure_future(ev.wait()) for ev in self._asyncio_events]
+        try:
+            await asyncio.wait(tasks, timeout=self._timeout, return_when=asyncio.ALL_COMPLETED)
+        finally:
+            # triggers even if this got canceled
+            for t in tasks:
+                if not t.done():
+                    t.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
 
     def abort(self):
         pass
@@ -94,6 +96,9 @@ class _CheckpointWaiter:
 
 
 class Waiter:
+    def __init__(self, *events: Event):
+        super().__init__([e._asyncio_event for e in events], timeout_us=None)
+
     @staticmethod
     def checkpoint() -> _CheckpointWaiter:
         return _CheckpointWaiter()
