@@ -150,7 +150,7 @@ class _IOWaiter(_Waiter):
 
     __slots__ = ['_fd', '_remove_fn']
 
-    def __init__(self, events: list[asyncio.Event], timeout_us: int | None, fd: int, remove_fn):
+    def __init__(self, events: list[asyncio.Event], timeout_us: int | None, fd: int, remove_fn: callable):
         super().__init__(events, timeout_us)
         self._fd = fd
         self._remove_fn = remove_fn
@@ -174,7 +174,7 @@ class _IOEvent(Event):
 
     __slots__ = ['_fd', '_remove_fn']
 
-    def __init__(self, fd: int, remove_fn):
+    def __init__(self, fd: int, remove_fn: callable):
         super().__init__()
         self._fd = fd
         self._remove_fn = remove_fn
