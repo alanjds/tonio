@@ -8,6 +8,7 @@ import inspect
 import sys
 import threading
 import time as _stdlib_time
+import warnings
 from collections import deque
 from types import CoroutineType
 from typing import Any
@@ -44,14 +45,16 @@ def _async_raise(tid: int, exc_type: type[BaseException]) -> None:
     as the native backend does ;)
     """
     ret = _PyThreadState_SetAsyncExc(ctypes.c_ulong(tid), exc_type)
+    # Return codes:
+    # 0 = thread not found
+    # 1 = succeeded: one thread found and schedule to abort
+    # >1 = unexpected state: more than one thread found??
     if ret != 1:
-        # Error codes:
-        # -1 = succeeded
-        # 0 = thread not found
-        # >1 = unexpected state
         # Clean up and continue.
         if ret > 1:
             _PyThreadState_SetAsyncExc(ctypes.c_ulong(tid), None)
+        else:
+            warnings.warn(f'Unexpected state when aborting a thread: {ret}', stacklevel=2)
 
 
 if sys.platform == 'win32':
