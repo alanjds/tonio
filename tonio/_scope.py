@@ -1,4 +1,4 @@
-from ._tonio import CancelledError, PyGenScope as _Scope, get_runtime
+from ._backend import CancelledError, PyGenScope as _Scope, get_runtime
 from ._types import Coro
 
 
@@ -19,7 +19,11 @@ class Scope(_Scope):
                 event.set()
 
         if wrapped_coro := self._track(wrapper):
-            get_runtime()._spawn_pygen(wrapped_coro)
+            task = get_runtime()._spawn_pygen(wrapped_coro)
+            # The asyncio backend needs to track it for cancelation.
+            # `task` is None on the native backend.
+            if task:
+                self._register_task(task)
 
     def __enter__(self):
         if not self._incr(0):

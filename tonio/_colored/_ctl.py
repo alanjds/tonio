@@ -2,7 +2,7 @@ import contextlib
 import threading
 from typing import Any, Awaitable, Callable, Iterable, ParamSpec, TypeVar
 
-from .._tonio import CancelledError, Result, get_runtime
+from .._backend import CancelledError, Result, get_runtime
 from ._events import Event
 from ._scope import Scope
 from ._sync import Barrier
