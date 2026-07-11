@@ -194,14 +194,21 @@ pub(crate) fn work_loop(
                 break;
             }
 
-            //: stop speculating and park, unless a final scan find work
+            //: stop speculating and park, unless a final scan on the injector find work
             if is_speculating {
                 is_speculating = false;
                 scheduler.speculation.fetch_sub(1, atomic::Ordering::AcqRel);
                 //: calls into `unpark_one` elide wakes while our search is active.
-                //  A handle pushed during our last scan would be stranded, thus
-                //  we need to re-scan after we released the token and actually park.
-                if let Some(handle) = find_work(&worker, &rself.work_injector, &scheduler.stealers, idx) {
+                //  A handle pushed to the injector during our last scan would be stranded,
+                //  thus we need to re-scan after we released the token and actually park.
+                let handle = loop {
+                    match rself.work_injector.steal() {
+                        Steal::Success(handle) => break Some(handle),
+                        Steal::Retry => {}
+                        Steal::Empty => break None,
+                    }
+                };
+                if let Some(handle) = handle {
                     if !scheduler.clear_idle(idx) {
                         //: as before, absorb the speculation token if the flag was claimed
                         scheduler.speculation.fetch_sub(1, atomic::Ordering::AcqRel);
