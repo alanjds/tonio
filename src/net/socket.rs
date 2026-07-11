@@ -39,11 +39,11 @@ impl Socket {
     }
 
     fn _io_arm_r(&self, py: Python) -> PyResult<Option<Py<Waiter>>> {
-        self.io.arm_r(py)
+        self.io.arm_r(py, None)
     }
 
     fn _io_arm_w(&self, py: Python) -> PyResult<Option<Py<Waiter>>> {
-        self.io.arm_w(py)
+        self.io.arm_w(py, None)
     }
 
     fn _io_clear_r(&self) {

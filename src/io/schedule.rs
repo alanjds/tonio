@@ -99,6 +99,18 @@ impl ScheduledIO {
             });
     }
 
+    //: atomically drain the direction's readiness bits, reporting whether any were set
+    fn consume(&self, mask: usize) -> bool {
+        self.readiness
+            .fetch_update(atomic::Ordering::AcqRel, atomic::Ordering::Acquire, |curr| {
+                if curr & mask == 0 {
+                    return None;
+                }
+                Some(curr & !mask)
+            })
+            .is_ok()
+    }
+
     // runtime API
     //: must be called before `wake` for the `arm` re-check to be sound
     pub(crate) fn set_readiness(&self, ready: usize) {
@@ -131,9 +143,9 @@ impl ScheduledIO {
     }
 
     // downstream API
-    pub(crate) fn arm_r(&self, py: Python) -> PyResult<Option<Py<Waiter>>> {
+    pub(crate) fn arm_r(&self, py: Python, timeout: Option<usize>) -> PyResult<Option<Py<Waiter>>> {
         match self.arm(py, READ_ALL)? {
-            Some(event) => Ok(Some(Waiter::from_event(py, event, None))),
+            Some(event) => Ok(Some(Waiter::from_event(py, event, timeout))),
             None => {
                 self.tick_r.store(self.current_tick(), atomic::Ordering::Release);
                 Ok(None)
@@ -141,9 +153,9 @@ impl ScheduledIO {
         }
     }
 
-    pub(crate) fn arm_w(&self, py: Python) -> PyResult<Option<Py<Waiter>>> {
+    pub(crate) fn arm_w(&self, py: Python, timeout: Option<usize>) -> PyResult<Option<Py<Waiter>>> {
         match self.arm(py, WRITE_ALL)? {
-            Some(event) => Ok(Some(Waiter::from_event(py, event, None))),
+            Some(event) => Ok(Some(Waiter::from_event(py, event, timeout))),
             None => {
                 self.tick_w.store(self.current_tick(), atomic::Ordering::Release);
                 Ok(None)
@@ -157,6 +169,14 @@ impl ScheduledIO {
 
     pub(crate) fn clear_w(&self) {
         self.clear(WRITE_ALL, self.tick_w.load(atomic::Ordering::Acquire));
+    }
+
+    pub(crate) fn consume_r(&self) -> bool {
+        self.consume(READ_ALL)
+    }
+
+    pub(crate) fn consume_w(&self) -> bool {
+        self.consume(WRITE_ALL)
     }
 }
 
