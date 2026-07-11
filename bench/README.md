@@ -1,6 +1,6 @@
 # TonIO benchmarks
 
-Run at: Sat 11 Jul 2026, 15:59    
+Run at: Sat 11 Jul 2026, 17:32    
 Environment: AMD Ryzen 7 5700X @ Gentoo Linux 6.12.93 (CPUs: 16)    
 Python version: 3.14    
 TonIO version: 0.8.0    
@@ -12,13 +12,13 @@ Time to run 1 million coroutines (lower is better).
 
 | Runtime | Creation time | Exec time | Total time | Relative performance |
 | --- | --- | --- | --- | --- |
-| TonIO yield | 111.021ms | 441.991ms | 553.012ms | 5.33x |
-| TonIO async | 84.723ms | 800.13ms | 884.853ms | 3.33x |
-| TonIO yield (context) | 73.389ms | 650.465ms | 723.854ms | 4.07x |
-| TonIO async (context) | 51.94ms | 955.25ms | 1007.19ms | 2.93x |
-| AsyncIO | 41.058ms | 2905.37ms | 2946.428ms | 1.0x |
-| Trio | 2249.859ms | 5114.693ms | 7364.552ms | 0.4x |
-| TinyIO | 72.036ms | 3361.385ms | 3433.422ms | 0.86x |
+| TonIO yield | 111.586ms | 436.158ms | 547.744ms | 5.42x |
+| TonIO async | 84.363ms | 801.735ms | 886.097ms | 3.35x |
+| TonIO yield (context) | 73.089ms | 634.501ms | 707.59ms | 4.19x |
+| TonIO async (context) | 51.898ms | 944.138ms | 996.036ms | 2.98x |
+| AsyncIO | 41.32ms | 2925.154ms | 2966.474ms | 1.0x |
+| Trio | 2820.314ms | 5084.876ms | 7905.19ms | 0.38x |
+| TinyIO | 72.162ms | 3357.313ms | 3429.475ms | 0.86x |
 
 ### Sockets
 
@@ -27,47 +27,47 @@ TCP echo server with raw sockets comparison using 1KB, 10KB and 100KB messages.
 
 | Runtime | Throughput (1KB) | Throughput (10KB) | Throughput (100KB) |
 | --- | --- | --- | --- |
-| TonIO yield | 111902.5 (2.07x) | 95212.1 (1.97x) | 40422.7 (1.45x) | 
-| TonIO async | 117049.0 (2.17x) | 100053.4 (2.07x) | 42627.0 (1.53x) | 
-| TonIO yield (context) | 111189.5 (2.06x) | 96032.6 (1.99x) | 41971.6 (1.51x) | 
-| TonIO async (context) | 115383.5 (2.14x) | 98284.6 (2.03x) | 41400.2 (1.49x) | 
-| AsyncIO | 54043.6 (1.0x) | 48364.8 (1.0x) | 27852.0 (1.0x) | 
-| Trio | 79770.4 (1.48x) | 69135.8 (1.43x) | 33809.1 (1.21x) | 
+| TonIO yield | 112356.9 (2.1x) | 97099.9 (2.02x) | 41348.7 (1.47x) | 
+| TonIO async | 115874.9 (2.16x) | 98661.5 (2.05x) | 42115.7 (1.5x) | 
+| TonIO yield (context) | 108955.4 (2.03x) | 93965.4 (1.95x) | 41269.4 (1.47x) | 
+| TonIO async (context) | 115194.2 (2.15x) | 96699.6 (2.01x) | 42667.8 (1.52x) | 
+| AsyncIO | 53615.7 (1.0x) | 48099.5 (1.0x) | 28082.0 (1.0x) | 
+| Trio | 79265.5 (1.48x) | 69249.4 (1.44x) | 35605.7 (1.27x) | 
 
 #### 1KB details
 
 | Runtime | Total requests | Throughput | Mean latency | 99p latency | Latency stdev |
 | --- | --- | --- | --- | --- | --- |
-| TonIO yield | 1119025 | 111902.5 (2.07x) | 0.032ms | 0.049ms | 0.004 |
-| TonIO async | 1170490 | 117049.0 (2.17x) | 0.03ms | 0.041ms | 0.002 |
-| TonIO yield (context) | 1111895 | 111189.5 (2.06x) | 0.032ms | 0.049ms | 0.004 |
-| TonIO async (context) | 1153835 | 115383.5 (2.14x) | 0.031ms | 0.047ms | 0.003 |
-| AsyncIO | 540436 | 54043.6 (1.0x) | 0.071ms | 0.089ms | 0.004 |
-| Trio | 797704 | 79770.4 (1.48x) | 0.049ms | 0.075ms | 0.01 |
+| TonIO yield | 1123569 | 112356.9 (2.1x) | 0.032ms | 0.049ms | 0.004 |
+| TonIO async | 1158749 | 115874.9 (2.16x) | 0.03ms | 0.046ms | 0.002 |
+| TonIO yield (context) | 1089554 | 108955.4 (2.03x) | 0.039ms | 0.05ms | 0.003 |
+| TonIO async (context) | 1151942 | 115194.2 (2.15x) | 0.031ms | 0.048ms | 0.003 |
+| AsyncIO | 536157 | 53615.7 (1.0x) | 0.071ms | 0.09ms | 0.004 |
+| Trio | 792655 | 79265.5 (1.48x) | 0.049ms | 0.076ms | 0.009 |
 
 
 #### 10KB details
 
 | Runtime | Total requests | Throughput | Mean latency | 99p latency | Latency stdev |
 | --- | --- | --- | --- | --- | --- |
-| TonIO yield | 952121 | 95212.1 (1.97x) | 0.04ms | 0.05ms | 0.002 |
-| TonIO async | 1000534 | 100053.4 (2.07x) | 0.04ms | 0.05ms | 0.004 |
-| TonIO yield (context) | 960326 | 96032.6 (1.99x) | 0.04ms | 0.05ms | 0.003 |
-| TonIO async (context) | 982846 | 98284.6 (2.03x) | 0.04ms | 0.05ms | 0.003 |
-| AsyncIO | 483648 | 48364.8 (1.0x) | 0.081ms | 0.099ms | 0.004 |
-| Trio | 691358 | 69135.8 (1.43x) | 0.056ms | 0.085ms | 0.011 |
+| TonIO yield | 970999 | 97099.9 (2.02x) | 0.04ms | 0.05ms | 0.001 |
+| TonIO async | 986615 | 98661.5 (2.05x) | 0.04ms | 0.05ms | 0.002 |
+| TonIO yield (context) | 939654 | 93965.4 (1.95x) | 0.04ms | 0.05ms | 0.002 |
+| TonIO async (context) | 966996 | 96699.6 (2.01x) | 0.04ms | 0.05ms | 0.001 |
+| AsyncIO | 480995 | 48099.5 (1.0x) | 0.081ms | 0.097ms | 0.003 |
+| Trio | 692494 | 69249.4 (1.44x) | 0.056ms | 0.085ms | 0.011 |
 
 
 #### 100KB details
 
 | Runtime | Total requests | Throughput | Mean latency | 99p latency | Latency stdev |
 | --- | --- | --- | --- | --- | --- |
-| TonIO yield | 404227 | 40422.7 (1.45x) | 0.098ms | 0.117ms | 0.006 |
-| TonIO async | 426270 | 42627.0 (1.53x) | 0.091ms | 0.109ms | 0.004 |
-| TonIO yield (context) | 419716 | 41971.6 (1.51x) | 0.093ms | 0.11ms | 0.006 |
-| TonIO async (context) | 414002 | 41400.2 (1.49x) | 0.093ms | 0.11ms | 0.005 |
-| AsyncIO | 278520 | 27852.0 (1.0x) | 0.141ms | 0.167ms | 0.01 |
-| Trio | 338091 | 33809.1 (1.21x) | 0.116ms | 0.166ms | 0.022 |
+| TonIO yield | 413487 | 41348.7 (1.47x) | 0.093ms | 0.112ms | 0.006 |
+| TonIO async | 421157 | 42115.7 (1.5x) | 0.093ms | 0.11ms | 0.007 |
+| TonIO yield (context) | 412694 | 41269.4 (1.47x) | 0.096ms | 0.111ms | 0.008 |
+| TonIO async (context) | 426678 | 42667.8 (1.52x) | 0.091ms | 0.108ms | 0.004 |
+| AsyncIO | 280820 | 28082.0 (1.0x) | 0.14ms | 0.164ms | 0.008 |
+| Trio | 356057 | 35605.7 (1.27x) | 0.11ms | 0.157ms | 0.021 |
 
 
 ### Concurrency
@@ -77,25 +77,25 @@ TCP echo server with raw sockets comparison using 1KB, 10KB and 100KB messages.
 
 | Mode | Threads | Total time |
 | --- | --- | --- |
-| TonIO yield | 1 | 552.624ms |
-| TonIO async | 1 | 885.205ms |
-| TonIO yield | 2 | 809.889ms |
-| TonIO async | 2 | 911.536ms |
-| TonIO yield | 4 | 1001.58ms |
-| TonIO async | 4 | 933.711ms |
-| TonIO yield | 8 | 1234.083ms |
-| TonIO async | 8 | 1311.115ms |
+| TonIO yield | 1 | 547.222ms |
+| TonIO async | 1 | 894.152ms |
+| TonIO yield | 2 | 676.385ms |
+| TonIO async | 2 | 911.002ms |
+| TonIO yield | 4 | 876.487ms |
+| TonIO async | 4 | 911.071ms |
+| TonIO yield | 8 | 1217.088ms |
+| TonIO async | 8 | 1136.173ms |
 
 #### Sockets
 
 
 | Mode | Threads | Throughput (10KB) |
 | --- | --- | --- |
-| TonIO yield | 1 | 94196.2 |
-| TonIO async | 1 | 99679.0 |
-| TonIO yield | 2 | 167536.7 |
-| TonIO async | 2 | 179658.6 |
-| TonIO yield | 4 | 238816.7 |
-| TonIO async | 4 | 248321.7 |
-| TonIO yield | 8 | 335412.8 |
-| TonIO async | 8 | 340941.9 |
+| TonIO yield | 1 | 95122.2 |
+| TonIO async | 1 | 96835.5 |
+| TonIO yield | 2 | 170683.5 |
+| TonIO async | 2 | 178237.0 |
+| TonIO yield | 4 | 236133.5 |
+| TonIO async | 4 | 249259.3 |
+| TonIO yield | 8 | 330499.5 |
+| TonIO async | 8 | 346245.6 |
