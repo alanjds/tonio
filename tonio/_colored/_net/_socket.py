@@ -95,11 +95,6 @@ class _Socket(_socket._Socket):
                 break
 
     async def recv(self, bufsize: int, flags: int = 0, /) -> bytes:
-        try:
-            return self._sock.recv(bufsize, flags)
-        except BlockingIOError, InterruptedError:
-            pass
-
         while True:
             if (waiter := self._io_arm_r()) is not None:
                 await waiter
@@ -118,11 +113,6 @@ class _Socket(_socket._Socket):
         return ret
 
     async def recv_into(self, /, buffer, nbytes: int = 0, flags: int = 0) -> int:
-        try:
-            return self._sock.recv_into(buffer, nbytes, flags)
-        except BlockingIOError, InterruptedError:
-            pass
-
         while True:
             if (waiter := self._io_arm_r()) is not None:
                 await waiter
@@ -141,11 +131,6 @@ class _Socket(_socket._Socket):
         return ret
 
     async def recvfrom(self, bufsize: int, flags: int = 0, /) -> tuple[bytes, Any]:
-        try:
-            return self._sock.recvfrom(bufsize, flags)
-        except BlockingIOError, InterruptedError:
-            pass
-
         while True:
             if (waiter := self._io_arm_r()) is not None:
                 await waiter
@@ -164,11 +149,6 @@ class _Socket(_socket._Socket):
         return ret
 
     async def recvfrom_into(self, /, buffer, nbytes: int = 0, flags: int = 0) -> tuple[int, Any]:
-        try:
-            return self._sock.recvfrom_into(buffer, nbytes, flags)
-        except BlockingIOError, InterruptedError:
-            pass
-
         while True:
             if (waiter := self._io_arm_r()) is not None:
                 await waiter
@@ -195,11 +175,6 @@ class _Socket(_socket._Socket):
             flags: int = 0,
             /,
         ) -> tuple[bytes, list[tuple[int, int, bytes]], int, object]:
-            try:
-                return self._sock.recvmsg(bufsize, ancbufsize, flags)
-            except BlockingIOError, InterruptedError:
-                pass
-
             while True:
                 if (waiter := self._io_arm_r()) is not None:
                     await waiter
@@ -224,11 +199,6 @@ class _Socket(_socket._Socket):
             flags: int = 0,
             /,
         ) -> tuple[int, list[tuple[int, int, bytes]], int, object]:
-            try:
-                return self._sock.recvmsg_into(buffers, ancbufsize, flags)
-            except BlockingIOError, InterruptedError:
-                pass
-
             while True:
                 if (waiter := self._io_arm_r()) is not None:
                     await waiter

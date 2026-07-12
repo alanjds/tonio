@@ -190,14 +190,6 @@ class _Socket(_SocketWrapper):
                 break
 
     def recv(self, bufsize: int, flags: int = 0, /) -> Coro[bytes]:
-        try:
-            data = self._sock.recv(bufsize, flags)
-        except BlockingIOError, InterruptedError:
-            data = None
-
-        if data is not None:
-            return data
-
         while True:
             if (waiter := self._io_arm_r()) is not None:
                 yield waiter
@@ -216,11 +208,6 @@ class _Socket(_SocketWrapper):
         return ret
 
     def recv_into(self, /, buffer, nbytes: int = 0, flags: int = 0) -> Coro[int]:
-        try:
-            return self._sock.recv_into(buffer, nbytes, flags)
-        except BlockingIOError, InterruptedError:
-            pass
-
         while True:
             if (waiter := self._io_arm_r()) is not None:
                 yield waiter
@@ -239,11 +226,6 @@ class _Socket(_SocketWrapper):
         return ret
 
     def recvfrom(self, bufsize: int, flags: int = 0, /) -> Coro[tuple[bytes, Any]]:
-        try:
-            return self._sock.recvfrom(bufsize, flags)
-        except BlockingIOError, InterruptedError:
-            pass
-
         while True:
             if (waiter := self._io_arm_r()) is not None:
                 yield waiter
@@ -262,11 +244,6 @@ class _Socket(_SocketWrapper):
         return ret
 
     def recvfrom_into(self, /, buffer, nbytes: int = 0, flags: int = 0) -> Coro[tuple[int, Any]]:
-        try:
-            return self._sock.recvfrom_into(buffer, nbytes, flags)
-        except BlockingIOError, InterruptedError:
-            pass
-
         while True:
             if (waiter := self._io_arm_r()) is not None:
                 yield waiter
@@ -293,11 +270,6 @@ class _Socket(_SocketWrapper):
             flags: int = 0,
             /,
         ) -> Coro[tuple[bytes, list[tuple[int, int, bytes]], int, object]]:
-            try:
-                return self._sock.recvmsg(bufsize, ancbufsize, flags)
-            except BlockingIOError, InterruptedError:
-                pass
-
             while True:
                 if (waiter := self._io_arm_r()) is not None:
                     yield waiter
@@ -322,11 +294,6 @@ class _Socket(_SocketWrapper):
             flags: int = 0,
             /,
         ) -> Coro[tuple[int, list[tuple[int, int, bytes]], int, object]]:
-            try:
-                return self._sock.recvmsg_into(buffers, ancbufsize, flags)
-            except BlockingIOError, InterruptedError:
-                pass
-
             while True:
                 if (waiter := self._io_arm_r()) is not None:
                     yield waiter
