@@ -3,17 +3,17 @@ from ._net import Socket, TLSStream
 from ._runtime import BlockingTaskCtl, Runtime, get_runtime, set_runtime
 from ._scope import PyAsyncGenScope, PyGenScope
 from ._sync import (
+    Barrier,
     Channel,
     ChannelReceiver,
     ChannelSender,
+    Lock,
     LockCtx,
+    Semaphore,
     SemaphoreCtx,
     UnboundedChannel,
     UnboundedChannelReceiver,
     UnboundedChannelSender,
-    _Barrier,
-    _Lock,
-    _Semaphore,
 )
 from .exceptions import (
     CancelledError,

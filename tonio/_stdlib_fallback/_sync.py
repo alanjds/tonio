@@ -7,7 +7,7 @@ from ._events import Event
 from .exceptions import WouldBlock
 
 
-class _Semaphore:
+class Semaphore:
     __slots__ = ['_value', '_waiters']
 
     def __init__(self, value: int):
@@ -40,7 +40,7 @@ class _Semaphore:
 class SemaphoreCtx:
     __slots__ = ['_semaphore']
 
-    def __init__(self, semaphore: '_Semaphore'):
+    def __init__(self, semaphore: 'Semaphore'):
         self._semaphore = semaphore
 
     def __enter__(self):
@@ -55,11 +55,11 @@ class LockCtx(SemaphoreCtx):
 
     __slots__ = []
 
-    def __init__(self, lock: _Lock):
+    def __init__(self, lock: Lock):
         super().__init__(lock)
 
 
-class _Lock(_Semaphore):
+class Lock(Semaphore):
     """Lock: A semaphore with 1 position.
 
     Implemented as a _Semaphore with an initial value of 1.
@@ -78,7 +78,7 @@ class _Lock(_Semaphore):
         raise AttributeError("'_Lock' object has no attribute 'tokens'")
 
 
-class _Barrier:
+class Barrier:
     __slots__ = ['_count', '_event']
 
     def __init__(self, value: int):

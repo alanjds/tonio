@@ -1,66 +1,47 @@
 """Backend selection machinery
 
-Everything that may use backend-cased imports should import from here.
+Everything that may use native-backed imports should import from here.
 
-The backend is resolved once, early and explicitly from the `TONIO_BACKEND`
-environment variable:
-- `native`: Rust-based
-- `asyncio`: Stdlib-based for every place where Rust module cannot compile
-- `auto`: `asyncio` on Windows, `native` on everything else.
+The maybe native-backed resources source is resolved once, early and explicitly
+from the `TONIO_USE_NATIVE` environment variable:
+- `true`ish : Rust-based
+- `false`ish : Stdlib-based for every place where Rust module cannot compile
+- unsed: stdlib-based on Windows, Rust-based on everything else.
 
-Setting `TONIO_BACKEND` to `native` do forces that backend even if
+Setting `TONIO_USE_NATIVE` to `true` do forces native-based resources even if
 the modules are not available, even on Windows,
-not falling back to `asyncio` to mask not wrong assumptions about the backend.
+not falling back to stdlib-based resources to mask not wrong assumptions.
 Then the ImportError should raise when tried.
 
 On the `native` path this module re-exports the compiled `._tonio` types.
-On the `asyncio` path it re-exports from `._asyncio_backend` modules.
+On the stdlib path it re-exports from `._stdlib_fallback` modules.
 """
 
 import os
 import sys
 
 
-REQUESTED_BACKEND = os.environ.get('TONIO_BACKEND', 'auto')
-if REQUESTED_BACKEND not in ('auto', 'native', 'asyncio'):
-    raise RuntimeError(f"Invalid TONIO_BACKEND={REQUESTED_BACKEND!r}. Expected 'auto', 'native' or 'asyncio'")
+_requested_use_native = os.environ.get('TONIO_USE_NATIVE', None)
+if _requested_use_native not in (None, 'true', 'yes', '1', 'false', 'no', '0'):
+    raise RuntimeError(f"Invalid TONIO_USE_NATIVE={_requested_use_native!r}. Expected 'true' or 'false'")
 
-BACKEND = REQUESTED_BACKEND
-if REQUESTED_BACKEND == 'auto':
+_using_native: bool = _requested_use_native
+if _requested_use_native is None:
     if sys.platform == 'win32':
-        BACKEND = 'asyncio'
+        _using_native = True
     else:
-        BACKEND = 'native'
+        _using_native = False
+elif _requested_use_native in ('true', 'yet', '1'):
+    _using_native = True
+else:
+    _using_native = False
 
-assert BACKEND != 'auto'
+# At this point the _using_native should already be resolved to True or False
+assert _using_native is not None
+assert isinstance(_using_native, bool)
 
-if BACKEND == 'asyncio':
-    from ._asyncio_backend._events import Event, Result, Waiter
-    from ._asyncio_backend._net import Socket, TLSStream
-    from ._asyncio_backend._runtime import BlockingTaskCtl, Runtime, get_runtime, set_runtime
-    from ._asyncio_backend._scope import PyAsyncGenScope, PyGenScope
-    from ._asyncio_backend._sync import (
-        Channel,
-        ChannelReceiver,
-        ChannelSender,
-        LockCtx,
-        SemaphoreCtx,
-        UnboundedChannel,
-        UnboundedChannelReceiver,
-        UnboundedChannelSender,
-        _Barrier as Barrier,
-        _Lock as Lock,
-        _Semaphore as Semaphore,
-    )
-    from ._asyncio_backend.exceptions import (
-        CancelledError,
-        ResourceBroken,
-        RuntimeAlreadyInitializedError,
-        RuntimeNotInitializedError,
-        TimeoutError,
-        WouldBlock,
-    )
-elif BACKEND == 'native':
+if _using_native:
+    # Using native bases
     from ._tonio import (
         Barrier as Barrier,
         BlockingTaskCtl as BlockingTaskCtl,
@@ -92,4 +73,34 @@ elif BACKEND == 'native':
         set_runtime as set_runtime,
     )
 else:
-    raise RuntimeError(f"Invalid BACKEND={BACKEND!r}. Expected 'native' or 'asyncio'")
+    # Falling back to pure-python asyncio-backed bases
+    from ._stdlib_fallback._events import Event as Event, Result as Result, Waiter as Waiter
+    from ._stdlib_fallback._net import Socket as Socket, TLSStream as TLSStream
+    from ._stdlib_fallback._runtime import (
+        BlockingTaskCtl as BlockingTaskCtl,
+        Runtime as Runtime,
+        get_runtime as get_runtime,
+        set_runtime as set_runtime,
+    )
+    from ._stdlib_fallback._scope import PyAsyncGenScope as PyAsyncGenScope, PyGenScope as PyGenScope
+    from ._stdlib_fallback._sync import (
+        Barrier as Barrier,
+        Channel as Channel,
+        ChannelReceiver as ChannelReceiver,
+        ChannelSender as ChannelSender,
+        Lock as Lock,
+        LockCtx as LockCtx,
+        Semaphore as Semaphore,
+        SemaphoreCtx as SemaphoreCtx,
+        UnboundedChannel as UnboundedChannel,
+        UnboundedChannelReceiver as UnboundedChannelReceiver,
+        UnboundedChannelSender as UnboundedChannelSender,
+    )
+    from ._stdlib_fallback.exceptions import (
+        CancelledError as CancelledError,
+        ResourceBroken as ResourceBroken,
+        RuntimeAlreadyInitializedError as RuntimeAlreadyInitializedError,
+        RuntimeNotInitializedError as RuntimeNotInitializedError,
+        TimeoutError as TimeoutError,
+        WouldBlock as WouldBlock,
+    )
