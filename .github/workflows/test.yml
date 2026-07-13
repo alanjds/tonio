@@ -38,7 +38,7 @@ jobs:
         source .venv/bin/activate
         make test
 
-  linux-asyncio:
+  linux-purepython:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     strategy:
@@ -50,7 +50,8 @@ jobs:
 
     env:
       UV_PYTHON: ${{ matrix.python-version }}
-      TONIO_BACKEND: asyncio
+      # Force to use the purepython modules instead of the native Rust module
+      TONIO_USE_NATIVE: 0
     steps:
     - uses: actions/checkout@v6
     - uses: astral-sh/setup-uv@v7
@@ -95,7 +96,7 @@ jobs:
         source .venv/bin/activate
         make test
 
-  windows-asyncio:
+  windows-purepython:
     runs-on: windows-latest
     continue-on-error: true
     strategy:
@@ -105,7 +106,7 @@ jobs:
         # Skipping 3.15t on Windows as `cryptography` have not wheel built.
         - '3.14t'
 
-    # The asyncio backend is pure Python. So Rust modules will not be built.
+    # The purepython modules are based on asyncio. So Rust modules will not be built.
     # For Windows, just put the source tree on the path.
     defaults:
       run:
