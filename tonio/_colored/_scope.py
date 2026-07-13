@@ -1,4 +1,4 @@
-from .._tonio import CancelledError, PyAsyncGenScope as _Scope, get_runtime
+from .._backend import CancelledError, PyAsyncGenScope as _Scope, get_runtime
 from . import yield_now
 
 
@@ -19,7 +19,11 @@ class Scope(_Scope):
                 event.set()
 
         if wrapped_coro := self._track(wrapper):
-            get_runtime()._spawn_pyasyncgen(wrapped_coro)
+            task = get_runtime()._spawn_pyasyncgen(wrapped_coro)
+            # The asyncio backend needs to track it for cancelation.
+            # `task` is None on the native backend.
+            if task:
+                self._register_task(task)
 
     async def __aenter__(self):
         if not self._incr(0):

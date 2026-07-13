@@ -3,7 +3,7 @@ import errno
 import signal
 import threading
 
-from ._tonio import CancelledError, get_runtime
+from ._backend import CancelledError, get_runtime
 
 
 class _SignalReceiver:
@@ -68,7 +68,8 @@ def _sig_add(sig):
         # register a dummy signal handler so Python will write the signal no in the wakeup fd
         signal.signal(sig, _noop)
         # set SA_RESTART to limit EINTR occurrences
-        signal.siginterrupt(sig, False)
+        if hasattr(signal, 'siginterrupt'):
+            signal.siginterrupt(sig, False)
     except OSError as exc:
         if exc.errno == errno.EINVAL:
             raise RuntimeError(f'signum {sig} cannot be caught')

@@ -1,7 +1,7 @@
 from typing import TypeVar
 
+from ._backend import CancelledError, Result, Waiter, get_runtime
 from ._events import Event
-from ._tonio import CancelledError, Result, Waiter, get_runtime
 from ._types import Coro
 
 
